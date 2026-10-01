@@ -4,7 +4,10 @@
   "main": "index.ts",
   "dependencies": {
     "expo": "~57.0.26",
+    "expo-auth-session": "~57.0.13",
+    "expo-secure-store": "~57.0.4",
     "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-fast-tflite": "^3.0.1"

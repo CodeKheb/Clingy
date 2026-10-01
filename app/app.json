@@ -3,6 +3,7 @@
     "name": "Clingy",
     "slug": "clingy",
     "version": "1.0.0",
+    "scheme": "clingy",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -23,7 +24,9 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      "expo-web-browser",
+      "expo-secure-store"
     ]
   }
 }
