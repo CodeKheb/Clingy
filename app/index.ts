@@ -1,5 +1,7 @@
 import { registerRootComponent } from 'expo';
 
+// Ensure the task definition is loaded during normal and headless launches.
+import './src/sync/backgroundSync';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
