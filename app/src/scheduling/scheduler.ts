@@ -3,12 +3,14 @@
 
 import {
   clearScheduleBlocks,
+  getAllClassMeetings,
   getMeta,
   getUpcomingAssignments,
   getUpcomingEvents,
   setMeta,
   upsertScheduleBlocks,
   type Assignment,
+  type ClassMeeting,
 } from '../db/queries';
 import { rescheduleReminders } from '../notifications/reminders';
 import { pushStudyBlocksToCalendar } from '../sync/calendarPush';
@@ -158,6 +160,37 @@ export type ProposedBlock = {
 type FreeSlot = { start: number; end: number };
 
 /**
+ * Turns the weekly class timetable into concrete busy windows for the planning
+ * window, in local time. Derived fresh on every rebuild, never stored.
+ */
+export function expandClassWindows(
+  meetings: Pick<ClassMeeting, 'day_of_week' | 'start_minutes' | 'end_minutes'>[],
+  now: number,
+  lookaheadDays: number = LOOKAHEAD_DAYS,
+): BusyWindow[] {
+  const windows: BusyWindow[] = [];
+  for (let d = 0; d < lookaheadDays; d++) {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() + d);
+    for (const m of meetings) {
+      if (m.day_of_week !== day.getDay()) continue;
+      const start = new Date(day);
+      start.setHours(Math.floor(m.start_minutes / 60), m.start_minutes % 60, 0, 0);
+      const end = new Date(day);
+      end.setHours(Math.floor(m.end_minutes / 60), m.end_minutes % 60, 0, 0);
+      windows.push({ start: start.getTime(), end: end.getTime() });
+    }
+  }
+  return windows;
+}
+
+/** Rebuilds and saves the schedule after the class timetable changed. */
+export async function rescheduleAfterClassChange(): Promise<void> {
+  await commitProposedSchedule(await buildProposedSchedule());
+}
+
+/**
  * The schedulable window for a calendar day (local midnight `dayStartMs`):
  * 08:00–22:00, clipped to `now` so we never propose a block in the past.
  * Returns null once the whole window is behind us.
@@ -202,7 +235,11 @@ function subtractBusy(free: FreeSlot, busy: FreeSlot[]): FreeSlot[] {
  * to persist the result.
  */
 export async function buildProposedSchedule(now: number = Date.now()): Promise<ProposedBlock[]> {
-  const [assignments, events] = await Promise.all([getUpcomingAssignments(), getUpcomingEvents()]);
+  const [assignments, events, classMeetings] = await Promise.all([
+    getUpcomingAssignments(),
+    getUpcomingEvents(),
+    getAllClassMeetings(),
+  ]);
 
   const sorted = [...assignments].sort((a, b) => {
     if (b.urgency_score !== a.urgency_score) return b.urgency_score - a.urgency_score;
@@ -227,6 +264,7 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
       end: new Date(e.end_at).getTime(),
     })),
     ...(await loadUnavailable(now)),
+    ...expandClassWindows(classMeetings, now),
   ];
 
   const blocks: ProposedBlock[] = [];

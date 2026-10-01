@@ -115,6 +115,7 @@ Code: `src/scheduling/scheduler.ts`. `buildProposedSchedule()` is deterministic 
 - **Pinned blocks:** when you move a block, its exact time is saved as a *pin*. Every rebuild places pins first, counts their minutes toward the assignment, and plans everything else around them.
 - **Finished sessions:** marking the first upcoming session done adds its minutes to that assignment's `done_minutes`; the rest re-plans around what's left.
 - **Busy times:** "can't make it" and the busy-time picker save unavailable windows that act like calendar events. They persist, so the automatic rebuild after a sync respects them.
+- **Classes:** the weekly timetable (`class_meetings`) is expanded into concrete busy windows for the 14-day window (`expandClassWindows`, local time) on every rebuild and merged with the calendar events. They are never stored as busy times, so editing the timetable takes effect on the next rebuild (`rescheduleAfterClassChange()`, called after every add, edit, delete and scan save).
 
 Small state that isn't a table lives in `app_meta` as JSON: `unavailable_windows`, `pinned_blocks`, `done_minutes`, `last_synced_at`, `calendar_push`, and `dismissals:<type>`.
 
@@ -126,6 +127,7 @@ SQLite (`src/db/schema.ts`, helpers in `queries.ts`):
 |---|---|
 | `courses`, `assignments`, `events` | What the last sync fetched; assignments carry `urgency_score`, `suggested_minutes` and `task_type` |
 | `schedule_blocks` | The current plan; deleting an assignment cascades to its blocks |
+| `class_meetings` | The weekly class timetable, one row per day a class meets (`day_of_week` 0 = Sunday, `start_minutes`/`end_minutes` after midnight, optional `room`). Entered by hand or from a COR scan |
 | `dismissed_assignments` | Ids you dismissed, so a sync doesn't bring them back |
 | `app_meta` | The small key/value state above |
 | `pet_state` | Cling's current mood |
@@ -135,6 +137,26 @@ SQLite (`src/db/schema.ts`, helpers in `queries.ts`):
 
 - **Reminders** (`src/notifications/reminders.ts`) are local notifications: a day before, two hours before and at each deadline, plus a "Study time" notification at the start of each session. Each reschedule cancels everything and schedules afresh, in parallel and queued so two quick changes can't cancel each other's work.
 - **Google Calendar** (`src/sync/calendarPush.ts`, `backend/src/routes/calendar.ts`): after each reschedule the app sends the study blocks to `POST /calendar/study-blocks`. The backend keeps events carrying a private `clingy` marker in step with them (create, rename, delete) and never touches the user's other events. Those events are filtered out when reading the calendar, so a study block can't block itself. It can be switched off in Settings, which removes them.
+
+## Class schedule and COR scan
+
+The Class tab (`ClassScreen`) lists the timetable by day and reads only SQLite. Classes are added by hand (`ClassFormSheet`) or from a photo of a Certificate of Registration, behind the `COR_SCAN_ENABLED` flag in `src/config.ts`.
+
+```mermaid
+sequenceDiagram
+  participant App
+  participant Backend
+  participant Gemini
+  App->>App: pick photo, resize to 1600px, JPEG 0.7
+  App->>Backend: POST /cor/parse {imageBase64, mimeType} + access token
+  Backend->>Gemini: image + prompt, structured JSON output
+  Gemini-->>Backend: {classes: [{subject, days, start, end, room}]}
+  Backend-->>App: sanitized classes
+  App->>App: parseDays("MWF") to day numbers, show editable list
+  App->>App: Save all writes class_meetings, rebuilds the plan
+```
+
+`backend/src/routes/cor.ts` checks the Google token, rejects photos over about 4 MB, calls Gemini (`GEMINI_MODEL`, default `gemini-3.1-flash-lite`) with a response schema, and drops unusable rows (missing subject or time, end not after start, more than 30 rows). The Gemini key lives only in the backend environment (`GEMINI_API_KEY`). The route stores nothing and logs only a status code, since a COR holds a student's name and ID. Day patterns are read in the app (`src/classes/parseDays.ts`); if one can't be read, the confirmation screen makes the student pick the days.
 
 ## Cling
 

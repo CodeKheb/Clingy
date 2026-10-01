@@ -6,11 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { C } from '../screens/utils/theme';
 
-export type NavTab = 'Home' | 'Schedule';
+export type NavTab = 'Home' | 'Schedule' | 'Class';
 
 const TABS: { label: NavTab; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }[] = [
   { label: 'Home', icon: 'home-outline', activeIcon: 'home' },
   { label: 'Schedule', icon: 'calendar-outline', activeIcon: 'calendar' },
+  { label: 'Class', icon: 'school-outline', activeIcon: 'school' },
 ];
 
 export function BottomNav({

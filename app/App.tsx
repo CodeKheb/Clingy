@@ -11,6 +11,7 @@ import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
 import { setOverlayAppForeground, setOverlayMood } from './src/pet/overlayBridge';
 import { useClingMood } from './src/pet/useClingMood';
+import { ClassScreen } from './src/screens/ClassScreen';
 import { ClingPanel } from './src/screens/ClingPanel';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -19,16 +20,18 @@ import { startBackgroundSync, stopBackgroundSync } from './src/sync/backgroundSy
 import { getMeta } from './src/db/queries';
 import { LAST_SYNCED_KEY, syncNow } from './src/sync/syncService';
 
-type Tab = 'home' | 'schedule';
+type Tab = 'home' | 'schedule' | 'class';
 
 type DeepLink = 'panel' | Tab | null;
 
-/** clingy://cling-panel opens the chat; clingy://home and clingy://schedule open those tabs. */
+const TAB_BY_NAV = { Home: 'home', Schedule: 'schedule', Class: 'class' } as const;
+
+/** clingy://cling-panel opens the chat; clingy://home, /schedule and /class open those tabs. */
 function parseDeepLink(url: string | null): DeepLink {
   if (url === null) return null;
   const host = Linking.parse(url).hostname;
   if (host === 'cling-panel') return 'panel';
-  return host === 'home' || host === 'schedule' ? host : null;
+  return host === 'home' || host === 'schedule' || host === 'class' ? host : null;
 }
 
 export default function App() {
@@ -186,7 +189,16 @@ function AppContent() {
               refreshing={refreshing}
               syncStatus={syncStatus}
               onRefresh={() => void runSync()}
-              onSelectTab={(t) => setTab(t === 'Schedule' ? 'schedule' : 'home')}
+              onSelectTab={(t) => setTab(TAB_BY_NAV[t])}
+              onSignOut={() => {
+                void signOut();
+                void stopBackgroundSync();
+                setSignedIn(false);
+              }}
+            />
+          ) : tab === 'class' ? (
+            <ClassScreen
+              onSelectTab={(t) => setTab(TAB_BY_NAV[t])}
               onSignOut={() => {
                 void signOut();
                 void stopBackgroundSync();
@@ -196,7 +208,7 @@ function AppContent() {
           ) : (
             <ScheduleScreen
               key={syncVersion}
-              onSelectTab={(t) => setTab(t === 'Home' ? 'home' : 'schedule')}
+              onSelectTab={(t) => setTab(TAB_BY_NAV[t])}
               onSignOut={() => {
                 void signOut();
                 void stopBackgroundSync();

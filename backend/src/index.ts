@@ -4,9 +4,12 @@ import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { classroomRouter } from "./routes/classroom";
 import { calendarRouter } from "./routes/calendar";
+import { corRouter } from "./routes/cor";
 
 const app = express();
 app.use(cors());
+// Photos arrive as base64 JSON, so /cor needs a bigger body limit; it must be mounted before the default parser.
+app.use("/cor", express.json({ limit: "6mb" }), corRouter);
 app.use(express.json());
 
 app.get("/health", (_req, res) => {

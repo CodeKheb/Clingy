@@ -546,6 +546,75 @@ export async function clearScheduleBlocks(database?: SQLiteDatabase): Promise<vo
 }
 
 // ---------------------------------------------------------------------------
+// Class meetings (weekly timetable; one row per day a class meets)
+// ---------------------------------------------------------------------------
+
+export type ClassMeeting = {
+  id: number;
+  subject: string;
+  /** 0 = Sunday ... 6 = Saturday */
+  day_of_week: number;
+  start_minutes: number;
+  end_minutes: number;
+  room: string | null;
+};
+
+export type ClassMeetingInput = Omit<ClassMeeting, 'id'>;
+
+function assertValidMeeting(m: ClassMeetingInput): void {
+  if (!m.subject.trim()) throw new RangeError('A class needs a subject.');
+  if (!Number.isInteger(m.day_of_week) || m.day_of_week < 0 || m.day_of_week > 6) {
+    throw new RangeError('day_of_week must be 0-6.');
+  }
+  if (!Number.isInteger(m.start_minutes) || !Number.isInteger(m.end_minutes) || m.start_minutes < 0 || m.end_minutes > 1440 || m.end_minutes <= m.start_minutes) {
+    throw new RangeError('A class must end after it starts.');
+  }
+}
+
+export async function getAllClassMeetings(database?: SQLiteDatabase): Promise<ClassMeeting[]> {
+  const db = await getDb(database);
+  return await db.getAllAsync<ClassMeeting>(
+    'SELECT * FROM class_meetings ORDER BY day_of_week ASC, start_minutes ASC;',
+  );
+}
+
+export async function insertClassMeetings(meetings: ClassMeetingInput[], database?: SQLiteDatabase): Promise<void> {
+  meetings.forEach(assertValidMeeting);
+  const db = await getDb(database);
+  await db.withTransactionAsync(async () => {
+    for (const m of meetings) {
+      await db.runAsync(
+        'INSERT INTO class_meetings (subject, day_of_week, start_minutes, end_minutes, room) VALUES (?, ?, ?, ?, ?);',
+        m.subject.trim(),
+        m.day_of_week,
+        m.start_minutes,
+        m.end_minutes,
+        m.room?.trim() || null,
+      );
+    }
+  });
+}
+
+export async function updateClassMeeting(id: number, m: ClassMeetingInput, database?: SQLiteDatabase): Promise<void> {
+  assertValidMeeting(m);
+  const db = await getDb(database);
+  await db.runAsync(
+    'UPDATE class_meetings SET subject = ?, day_of_week = ?, start_minutes = ?, end_minutes = ?, room = ? WHERE id = ?;',
+    m.subject.trim(),
+    m.day_of_week,
+    m.start_minutes,
+    m.end_minutes,
+    m.room?.trim() || null,
+    id,
+  );
+}
+
+export async function deleteClassMeeting(id: number, database?: SQLiteDatabase): Promise<void> {
+  const db = await getDb(database);
+  await db.runAsync('DELETE FROM class_meetings WHERE id = ?;', id);
+}
+
+// ---------------------------------------------------------------------------
 // Dedicated Embeddings Table CRUD
 // ---------------------------------------------------------------------------
 

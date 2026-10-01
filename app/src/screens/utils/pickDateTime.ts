@@ -83,6 +83,12 @@ export async function pickBusyRange(): Promise<{ start: Date; end: Date } | null
   };
 }
 
+/** A time of day as minutes after midnight. Null if the user backs out. */
+export async function pickTimeOfDay(initialMinutes: number, hint: string): Promise<number | null> {
+  const picked = await pick('time', atTime(new Date(), Math.floor(initialMinutes / 60), initialMinutes % 60), hint);
+  return picked instanceof Date ? picked.getHours() * 60 + picked.getMinutes() : null;
+}
+
 /** A single moment: day, then time of day. Null if the user backs out. */
 export async function pickMoment(initial: Date): Promise<Date | null> {
   const day = await pick('date', initial, 'Move to which day?', { minimumDate: new Date() });

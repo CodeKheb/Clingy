@@ -100,6 +100,15 @@ async function createSchema(db: SQLiteDatabase): Promise<void> {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS class_meetings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject TEXT NOT NULL,
+      day_of_week INTEGER NOT NULL,
+      start_minutes INTEGER NOT NULL,
+      end_minutes INTEGER NOT NULL,
+      room TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS embeddings (
       id TEXT PRIMARY KEY,
       entity_type TEXT NOT NULL,
