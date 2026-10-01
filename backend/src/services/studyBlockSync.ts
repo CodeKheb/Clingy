@@ -20,7 +20,15 @@ export type ExistingEvent = {
 export const summaryFor = (b: DesiredBlock) => `Study: ${b.title}`;
 export const descriptionFor = (b: DesiredBlock) => `${b.label}\nPlanned by Cling`;
 
-export function planCalendarChanges(existing: ExistingEvent[], desired: DesiredBlock[]) {
+export type EventWording = { summary: (b: DesiredBlock) => string; description: (b: DesiredBlock) => string };
+
+const STUDY_WORDING: EventWording = { summary: summaryFor, description: descriptionFor };
+
+export const classSummaryFor = (b: DesiredBlock) => `Class: ${b.title}`;
+export const classDescriptionFor = (b: DesiredBlock) => `${b.label ? `${b.label}\n` : ""}Added by Cling`;
+export const CLASS_WORDING: EventWording = { summary: classSummaryFor, description: classDescriptionFor };
+
+export function planCalendarChanges(existing: ExistingEvent[], desired: DesiredBlock[], wording: EventWording = STUDY_WORDING) {
   const existingKeys = new Set(existing.map((e) => e.key));
   const desiredByKey = new Map(desired.map((d) => [d.key, d]));
 
@@ -36,7 +44,7 @@ export function planCalendarChanges(existing: ExistingEvent[], desired: DesiredB
 
   const toUpdate = [...kept.values()]
     .map((event) => ({ event, block: desiredByKey.get(event.key)! }))
-    .filter(({ event, block }) => event.summary !== summaryFor(block) || event.description !== descriptionFor(block));
+    .filter(({ event, block }) => event.summary !== wording.summary(block) || event.description !== wording.description(block));
 
   return { toCreate, toDelete, toUpdate };
 }

@@ -2,7 +2,8 @@
 // calendar app. The backend keeps Cling's events in step with these blocks: new ones created,
 // moved or finished ones removed. On by default; Settings can turn it off, which removes them.
 
-import { getMeta, getUpcomingAssignments, getUpcomingScheduleBlocks, setMeta } from '../db/queries';
+import { expandClassOccurrences } from '../classes/occurrences';
+import { getAllClassMeetings, getMeta, getUpcomingAssignments, getUpcomingScheduleBlocks, setMeta } from '../db/queries';
 import { sessionLabels, type TaskType } from '../priority/taskProfile';
 import { authorizedFetch } from './authorizedFetch';
 
@@ -12,7 +13,7 @@ export async function isCalendarPushEnabled(): Promise<boolean> {
   return (await getMeta(ENABLED_KEY)) !== 'off';
 }
 
-async function run(): Promise<void> {
+async function pushBlocks(): Promise<void> {
   const enabled = await isCalendarPushEnabled();
   const [assignments, blocks] = enabled
     ? await Promise.all([getUpcomingAssignments(), getUpcomingScheduleBlocks()])
@@ -35,6 +36,37 @@ async function run(): Promise<void> {
     }),
   });
   if (!response.ok) console.warn(`[calendar] could not update Google Calendar (${response.status})`);
+}
+
+const CLASS_PUSH_DAYS = 28;
+
+// Class meetings become single events for the next four weeks, re-synced on every reschedule.
+async function pushClasses(): Promise<void> {
+  const now = Date.now();
+  const occurrences = (await isCalendarPushEnabled())
+    ? expandClassOccurrences(await getAllClassMeetings(), now, CLASS_PUSH_DAYS).filter((o) => o.end > now)
+    : []; // switched off: send nothing, so the backend deletes what Cling added
+
+  const response = await authorizedFetch('/calendar/classes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      blocks: occurrences.map((o) => ({
+        key: `${o.meeting.id}|${o.start}`,
+        title: o.meeting.subject,
+        label: o.meeting.room ?? '',
+        startAt: new Date(o.start).toISOString(),
+        endAt: new Date(o.end).toISOString(),
+      })),
+    }),
+  });
+  if (!response.ok) console.warn(`[calendar] could not update classes on Google Calendar (${response.status})`);
+}
+
+async function run(): Promise<void> {
+  // Independent, so a failure on one doesn't stop the other.
+  await pushBlocks().catch((e) => console.warn('[calendar] study block push failed:', e));
+  await pushClasses().catch((e) => console.warn('[calendar] class push failed:', e));
 }
 
 // One at a time, so two quick reschedules can't race each other's creates and deletes.

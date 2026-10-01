@@ -115,7 +115,7 @@ Code: `src/scheduling/scheduler.ts`. `buildProposedSchedule()` is deterministic 
 - **Pinned blocks:** when you move a block, its exact time is saved as a *pin*. Every rebuild places pins first, counts their minutes toward the assignment, and plans everything else around them.
 - **Finished sessions:** marking the first upcoming session done adds its minutes to that assignment's `done_minutes`; the rest re-plans around what's left.
 - **Busy times:** "can't make it" and the busy-time picker save unavailable windows that act like calendar events. They persist, so the automatic rebuild after a sync respects them.
-- **Classes:** the weekly timetable (`class_meetings`) is expanded into concrete busy windows for the 14-day window (`expandClassWindows`, local time) on every rebuild and merged with the calendar events. They are never stored as busy times, so editing the timetable takes effect on the next rebuild (`rescheduleAfterClassChange()`, called after every add, edit, delete and scan save).
+- **Classes:** the weekly timetable (`class_meetings`) is expanded into concrete busy windows for the 14-day window (`expandClassOccurrences`, local time) on every rebuild and merged with the calendar events. They are never stored as busy times, so editing the timetable takes effect on the next rebuild (`rescheduleAfterClassChange()`, called after every add, edit, delete and scan save).
 
 Small state that isn't a table lives in `app_meta` as JSON: `unavailable_windows`, `pinned_blocks`, `done_minutes`, `last_synced_at`, `calendar_push`, and `dismissals:<type>`.
 
@@ -137,6 +137,7 @@ SQLite (`src/db/schema.ts`, helpers in `queries.ts`):
 
 - **Reminders** (`src/notifications/reminders.ts`) are local notifications: a day before, two hours before and at each deadline, plus a "Study time" notification at the start of each session. Each reschedule cancels everything and schedules afresh, in parallel and queued so two quick changes can't cancel each other's work.
 - **Google Calendar** (`src/sync/calendarPush.ts`, `backend/src/routes/calendar.ts`): after each reschedule the app sends the study blocks to `POST /calendar/study-blocks`. The backend keeps events carrying a private `clingy` marker in step with them (create, rename, delete) and never touches the user's other events. Those events are filtered out when reading the calendar, so a study block can't block itself. It can be switched off in Settings, which removes them.
+- **Classes on the calendar:** the same push also sends the next four weeks of class meetings to `POST /calendar/classes`, as single events titled "Class: ..." with the room as location. They carry their own private marker (`clingyClass`), so the study-block sync never deletes them, and they are filtered out when the calendar is read back (the scheduler already knows classes, and a deleted class must not linger as busy time).
 
 ## Class schedule and COR scan
 
