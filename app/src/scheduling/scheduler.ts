@@ -2,7 +2,14 @@
 // Greedy allocator: sorts assignments by urgencyScore + dueAt, places suggestedMinutes
 // into free slots relative to calendar events, writes schedule_blocks.
 
-import { getUpcomingAssignments, getUpcomingEvents, upsertScheduleBlocks, type Assignment } from '../db/queries';
+import {
+  clearScheduleBlocks,
+  getUpcomingAssignments,
+  getUpcomingEvents,
+  upsertScheduleBlocks,
+  type Assignment,
+} from '../db/queries';
+import { rescheduleReminders } from '../notifications/reminders';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_SLOT_MINUTES = 15;
@@ -19,13 +26,20 @@ export type ProposedBlock = {
 
 type FreeSlot = { start: number; end: number };
 
-function dayWindow(dayStartMs: number): FreeSlot {
-  const day = new Date(dayStartMs);
-  const start = new Date(day);
+/**
+ * The schedulable window for a calendar day (local midnight `dayStartMs`):
+ * 08:00–22:00, clipped to `now` so we never propose a block in the past.
+ * Returns null once the whole window is behind us.
+ */
+function dayWindow(dayStartMs: number, now: number): FreeSlot | null {
+  const start = new Date(dayStartMs);
   start.setHours(DAY_START_HOUR, 0, 0, 0);
-  const end = new Date(day);
+  const end = new Date(dayStartMs);
   end.setHours(DAY_END_HOUR, 0, 0, 0);
-  return { start: start.getTime(), end: end.getTime() };
+
+  const windowStart = Math.max(start.getTime(), now);
+  if (windowStart >= end.getTime()) return null;
+  return { start: windowStart, end: end.getTime() };
 }
 
 // Subtracts busy event windows from the day's free window, returning the
@@ -63,18 +77,27 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
     return aDue - bDue;
   });
 
-  const busyByDay = new Map<number, FreeSlot[]>();
+  // Calendar-day anchors at local midnight (via setDate, so DST shifts don't
+  // drift the window off the day it belongs to).
+  const dayStarts: number[] = [];
   for (let d = 0; d < LOOKAHEAD_DAYS; d++) {
-    const dayStart = now + d * DAY_MS;
-    busyByDay.set(
-      d,
-      events
-        .map((e) => ({ start: new Date(e.start_at).getTime(), end: new Date(e.end_at).getTime() }))
-        .filter((e) => e.end > dayStart && e.start < dayStart + DAY_MS),
-    );
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() + d);
+    dayStarts.push(day.getTime());
   }
 
+  const eventWindows: FreeSlot[] = events.map((e) => ({
+    start: new Date(e.start_at).getTime(),
+    end: new Date(e.end_at).getTime(),
+  }));
+
   const blocks: ProposedBlock[] = [];
+
+  // Blocks already placed for earlier assignments, per day, so later
+  // assignments don't double-book the same slot. Shared across all
+  // assignments (unlike the per-assignment loop variable below).
+  const claimedByDay = new Map<number, FreeSlot[]>();
 
   for (const assignment of sorted) {
     let minutesLeft = assignment.suggested_minutes;
@@ -83,11 +106,20 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
     const dueMs = assignment.due_at ? new Date(assignment.due_at).getTime() : now + LOOKAHEAD_DAYS * DAY_MS;
 
     for (let d = 0; d < LOOKAHEAD_DAYS && minutesLeft > 0; d++) {
-      const dayStart = now + d * DAY_MS;
+      const dayStart = dayStarts[d];
       if (dayStart >= dueMs) break;
 
-      const free = subtractBusy(dayWindow(dayStart), busyByDay.get(d) ?? []);
-      for (const slot of free) {
+      const window = dayWindow(dayStart, now);
+      if (!window) continue; // today's 08:00–22:00 window is already over
+
+      // Busy = calendar events overlapping this day's window, plus the slots
+      // earlier assignments already claimed on this day.
+      const busy: FreeSlot[] = [
+        ...eventWindows.filter((e) => e.end > window.start && e.start < window.end),
+        ...(claimedByDay.get(d) ?? []),
+      ];
+
+      for (const slot of subtractBusy(window, busy)) {
         if (minutesLeft <= 0) break;
         const slotMinutes = (slot.end - slot.start) / 60000;
         const take = Math.min(minutesLeft, slotMinutes);
@@ -103,7 +135,7 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
         });
 
         // Claim this time so later assignments don't double-book it.
-        busyByDay.set(d, [...(busyByDay.get(d) ?? []), { start: blockStart, end: blockEnd }]);
+        claimedByDay.set(d, [...(claimedByDay.get(d) ?? []), { start: blockStart, end: blockEnd }]);
         minutesLeft -= take;
       }
     }
@@ -113,6 +145,11 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
 }
 
 export async function commitProposedSchedule(blocks: ProposedBlock[]): Promise<void> {
+  // The proposal is a full rebuild of every block, so wipe the old rows first.
+  // Without this, re-running the scheduler appends a second set alongside the
+  // previous one whenever the generated ids change (they embed the array index
+  // and the slot time, both of which shift as time/data change).
+  await clearScheduleBlocks();
   await upsertScheduleBlocks(
     blocks.map((b, i) => ({
       id: `${b.assignmentId}-${i}-${b.startAt}`,
@@ -121,6 +158,7 @@ export async function commitProposedSchedule(blocks: ProposedBlock[]): Promise<v
       end_at: b.endAt,
     })),
   );
+  await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
 }
 
 export type { Assignment };

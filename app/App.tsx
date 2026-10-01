@@ -1,11 +1,11 @@
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { AppState, Pressable, ActivityIndicator, StyleSheet, Text, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getStoredTokens, signOut } from './src/auth/googleAuth';
 import { schemaReady } from './src/db/schema';
-import { getStoredTokens } from './src/auth/googleAuth';
 import { initPriorityScorer } from './src/priority';
 import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
@@ -41,6 +41,38 @@ function AppContent() {
   useEffect(() => {
     void getStoredTokens().then((tokens) => setSignedIn(tokens !== null));
   }, []);
+
+  // Single entry point for syncing: screens read SQLite only on mount, so
+  // bumping syncVersion (used as their key) makes them reload after a sync.
+  const [syncVersion, setSyncVersion] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const syncingRef = useRef(false);
+  const lastSyncRef = useRef(0);
+  const runSync = useCallback(async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setRefreshing(true);
+    try {
+      const result = await syncNow();
+      if (!result.ok) console.warn('[sync] failed:', result.error);
+      lastSyncRef.current = Date.now();
+      setSyncVersion((v) => v + 1);
+    } finally {
+      syncingRef.current = false;
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Sync on launch / right after sign-in, and whenever the app returns to the
+  // foreground (throttled to once a minute).
+  useEffect(() => {
+    if (signedIn !== true) return;
+    void runSync();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && Date.now() - lastSyncRef.current > 60_000) void runSync();
+    });
+    return () => subscription.remove();
+  }, [signedIn, runSync]);
 
   // Keeps the native floating bubble's animation (if running) in sync with
   // the same mood driving the in-app widget — a no-op while the overlay is
@@ -93,10 +125,6 @@ function AppContent() {
     });
   }, []);
 
-  if (signedIn === null) {
-    return <View style={[styles.container, { paddingTop: insets.top }]} />;
-  }
-
   const [databaseStatus, setDatabaseStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
@@ -113,6 +141,10 @@ function AppContent() {
     };
   }, []);
 
+  if (signedIn === null) {
+    return <View style={[styles.container, { paddingTop: insets.top }]} />;
+  }
+
   if (databaseStatus !== 'ready') {
     return (
       <View style={styles.container}>
@@ -126,9 +158,42 @@ function AppContent() {
     );
   }
   return (
-    <View style={styles.container}>
-      <PetScreen />
-      <PetFloatingFallback mood={mood} onPress={() => {}} />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {panelOpen ? (
+        <ClingPanel onClose={() => setPanelOpen(false)} />
+      ) : signedIn ? (
+        <View style={{ flex: 1, paddingBottom: insets.bottom }}>
+          {tab === 'home' ? (
+            <HomeScreen
+              key={syncVersion}
+              refreshing={refreshing}
+              onRefresh={() => void runSync()}
+              onSelectTab={(t) => setTab(t === 'Schedule' ? 'schedule' : 'home')}
+              onSignOut={() => {
+                void signOut();
+                setSignedIn(false);
+              }}
+              onStartTask={() => setPanelOpen(true)}
+            />
+          ) : (
+            <ScheduleScreen
+              key={syncVersion}
+              onSelectTab={(t) => setTab(t === 'Home' ? 'home' : 'schedule')}
+              onSignOut={() => {
+                void signOut();
+                setSignedIn(false);
+              }}
+            />
+          )}
+        </View>
+      ) : (
+        <LoginScreen
+          onSignedIn={() => setSignedIn(true)}
+        />
+      )}
+      {!panelOpen && (
+        <PetFloatingFallback mood={mood} onPress={() => setPanelOpen(true)} bottomInset={insets.bottom} />
+      )}
       <StatusBar style="auto" />
     </View>
   );
@@ -138,22 +203,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  tabLabel: {
-    color: '#888',
-    fontWeight: '600',
-  },
-  tabLabelActive: {
-    color: '#ff8c3b',
   },
 });

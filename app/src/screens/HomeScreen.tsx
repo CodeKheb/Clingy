@@ -5,23 +5,20 @@
 // comes from src/theme.ts and src/components/ so it stays identical to the
 // Schedule screen.
 
-import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
-import { Badge } from '../components/Badge';
 import { BottomNav } from '../components/BottomNav';
 import { EmptyState } from '../components/EmptyState';
-import { EventTimeline } from '../components/EventTimeline';
 import { SectionHeader } from '../components/SectionHeader';
 import {
   type Assignment,
-  type Event as CalEvent,
+  deleteAssignment,
   getUpcomingAssignments,
-  getUpcomingEvents,
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
-import { C, urgencyColor, urgencyLabel } from './utils/theme';
+import { C } from './utils/theme';
 import { dueLabel, durationEstimate } from './utils/format';
 
 // ---------------------------------------------------------------------------
@@ -35,7 +32,7 @@ const MASCOT_GREETING =
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function GreetingCard({ highPriorityCount }: { highPriorityCount: number }) {
+function GreetingCard({ dueThisWeek }: { dueThisWeek: number }) {
   return (
     <View style={styles.greetingCard}>
       {/* Decorative glow */}
@@ -53,86 +50,53 @@ function GreetingCard({ highPriorityCount }: { highPriorityCount: number }) {
           <View style={styles.greetingOnlineDot} />
         </View>
 
-        {/* Text */}
+        {/* One honest line, computed from real data */}
         <View style={styles.greetingTextWrap}>
-          <View style={styles.greetingTitleRow}>
-            <Text style={styles.greetingHey}>Hey Alex!</Text>
-            <Badge tone="tertiary" label="Peak Focus Window" />
-          </View>
           <Text style={styles.greetingDesc}>
-            You have{' '}
-            <Text style={styles.greetingBold}>
-              {highPriorityCount} high-leverage task
-              {highPriorityCount !== 1 ? 's' : ''}
-            </Text>{' '}
-            before 5 PM. Offline bio-rhythm shows optimal energy right now—ready
-            to crush{' '}
-            <Text style={styles.greetingPrimaryHighlight}>CS 106B</Text>?
+            {dueThisWeek > 0
+              ? `${dueThisWeek} task${dueThisWeek !== 1 ? 's' : ''} due this week.`
+              : 'No tasks due this week.'}
           </Text>
         </View>
       </View>
 
-      {/* Quick action chips */}
-      <View style={styles.chipRow}>
-        <Pressable style={styles.chipPrimary}>
-          <Text style={styles.chipPrimaryIcon}>▶</Text>
-          <Text style={styles.chipPrimaryText}>Start 25m Focus Block</Text>
-        </Pressable>
-        <Pressable style={styles.chipSecondary}>
-          <Text style={styles.chipSecondaryIcon}>💤</Text>
-          <Text style={styles.chipSecondaryText}>Snooze 15m</Text>
-        </Pressable>
-        <Pressable style={styles.chipTertiary}>
-          <Text style={styles.chipTertiaryIcon}>☕</Text>
-          <Text style={styles.chipTertiaryText}>Re-charge</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
 
-function ScheduleTimeline({ events }: { events: CalEvent[] }) {
-  return (
-    <View style={styles.section}>
-      <SectionHeader
-        icon="📅"
-        title="Today's Schedule Snapshot"
-        right={<Badge tone="secondary" label="GCal Offline Sync" />}
-      />
-      <EventTimeline
-        events={events}
-        emptyText="No events synced yet. Sync your Google Calendar to see today's schedule."
-      />
-    </View>
-  );
-}
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
-function HeroTaskCard({ assignment }: { assignment: Assignment }) {
-  const progress = assignment.suggested_minutes > 0 ? 0.4 : 0; // placeholder
-  const progressPct = Math.round(progress * 100);
+function HeroTaskCard({
+  assignment,
+  onStartTask,
+  onDismiss,
+}: {
+  assignment: Assignment;
+  onStartTask?: () => void;
+  onDismiss?: (id: string) => void;
+}) {
+  const handleMorePress = () => {
+    if (!onDismiss) return;
+    Alert.alert(assignment.title, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Dismiss task',
+        style: 'destructive',
+        onPress: () => onDismiss(assignment.id),
+      },
+    ]);
+  };
 
   return (
     <View style={styles.heroCard}>
       {/* Header row */}
       <View style={styles.heroHeaderRow}>
         <View style={styles.heroHeaderLeft}>
-          <View style={styles.heroRankRow}>
-            <View
-              style={[
-                styles.heroRankBadge,
-                { backgroundColor: urgencyColor(assignment.urgency_score) },
-              ]}
-            >
-              <Text style={styles.heroRankBadgeIcon}>🚩</Text>
-              <Text style={styles.heroRankBadgeText}>
-                Rank #1 • {urgencyLabel(assignment.urgency_score)}
-              </Text>
-            </View>
-            <Text style={styles.heroSourceLabel}>Google Classroom</Text>
-          </View>
           <Text style={styles.heroTitle}>{assignment.title}</Text>
         </View>
-        <Pressable style={styles.heroMoreBtn}>
+        <Pressable style={styles.heroMoreBtn} onPress={handleMorePress}>
           <Text style={styles.heroMoreIcon}>⋮</Text>
         </Pressable>
       </View>
@@ -157,21 +121,6 @@ function HeroTaskCard({ assignment }: { assignment: Assignment }) {
         </View>
       </View>
 
-      {/* Progress bar */}
-      {progressPct > 0 && (
-        <View style={styles.progressWrap}>
-          <View style={styles.progressLabelRow}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressPct}>{progressPct}%</Text>
-          </View>
-          <View style={styles.progressTrack}>
-            <View
-              style={[styles.progressFill, { width: `${progressPct}%` as any }]}
-            />
-          </View>
-        </View>
-      )}
-
       {/* Suggestion tip */}
       {assignment.description ? (
         <View style={styles.suggestionTip}>
@@ -183,7 +132,7 @@ function HeroTaskCard({ assignment }: { assignment: Assignment }) {
       ) : null}
 
       {/* CTA */}
-      <Pressable style={styles.ctaButton}>
+      <Pressable style={styles.ctaButton} onPress={onStartTask}>
         <Text style={styles.ctaIcon}>🎯</Text>
         <Text style={styles.ctaText}>Start Task</Text>
       </Pressable>
@@ -193,26 +142,18 @@ function HeroTaskCard({ assignment }: { assignment: Assignment }) {
 
 function SecondaryTaskCard({
   assignment,
-  rank,
 }: {
   assignment: Assignment;
-  rank: number;
 }) {
   return (
     <View style={styles.secondaryCard}>
       <View style={styles.secondaryHeaderRow}>
         <View style={styles.secondaryHeaderLeft}>
-          <View style={styles.secondaryRankRow}>
-            <View style={styles.secondaryRankBadge}>
-              <Text style={styles.secondaryRankText}>Rank #{rank}</Text>
-            </View>
-            <Text style={styles.secondaryDueLabel}>
-              {dueLabel(assignment.due_at)}
-            </Text>
-          </View>
+          <Text style={styles.secondaryDueLabel}>
+            {dueLabel(assignment.due_at)}
+          </Text>
           <Text style={styles.secondaryTitle}>{assignment.title}</Text>
         </View>
-        <Text style={styles.secondaryCachedIcon}>✅</Text>
       </View>
 
       {assignment.description ? (
@@ -226,28 +167,32 @@ function SecondaryTaskCard({
   );
 }
 
-function AIPriorityQueue({ assignments }: { assignments: Assignment[] }) {
+function AIPriorityQueue({
+  assignments,
+  onStartTask,
+  onDismiss,
+}: {
+  assignments: Assignment[];
+  onStartTask?: () => void;
+  onDismiss?: (id: string) => void;
+}) {
   const hero = assignments[0] ?? null;
   const rest = assignments.slice(1, 4); // show up to 3 more
 
   return (
     <View style={styles.section}>
-      <SectionHeader
-        icon="🤖"
-        title="AI Priority Queue"
-        right={<Badge tone="primary" icon="🧠" label="Local Gemma-2B" />}
-      />
+      <SectionHeader icon="🤖" title="AI Priority Queue" />
 
       {/* Hero task */}
       {hero ? (
-        <HeroTaskCard assignment={hero} />
+        <HeroTaskCard assignment={hero} onStartTask={onStartTask} onDismiss={onDismiss} />
       ) : (
         <EmptyState text="No assignments synced yet. Sync Google Classroom to see your priority queue." />
       )}
 
       {/* Secondary tasks */}
-      {rest.map((a, i) => (
-        <SecondaryTaskCard key={a.id} assignment={a} rank={i + 2} />
+      {rest.map((a) => (
+        <SecondaryTaskCard key={a.id} assignment={a} />
       ))}
     </View>
   );
@@ -257,57 +202,82 @@ function AIPriorityQueue({ assignments }: { assignments: Assignment[] }) {
 // Main screen
 // ---------------------------------------------------------------------------
 
-export function HomeScreen() {
+export type HomeScreenProps = {
+  onSelectTab?: (tab: import('../components/BottomNav').NavTab) => void;
+  onSignOut?: () => void;
+  onStartTask?: () => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+};
+
+export function HomeScreen({ onSelectTab, onSignOut, onStartTask, refreshing = false, onRefresh }: HomeScreenProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [dueThisWeek, setDueThisWeek] = useState(0);
+
+  const loadFromDb = useCallback(async () => {
+    await schemaReady;
+    const [a] = await Promise.all([getUpcomingAssignments()]);
+    setAssignments(a);
+    // Honest count for the greeting: everything due within the next 7 days
+    // (overdue included — it's still due). Computed here rather than in render
+    // so Date.now() is never called during render (react-hooks/purity).
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() + weekMs;
+    setDueThisWeek(
+      a.filter((x) => x.due_at && new Date(x.due_at).getTime() <= cutoff).length,
+    );
+  }, []);
+
+  const onDismissAssignment = useCallback(
+    async (id: string) => {
+      try {
+        await deleteAssignment(id);
+        await loadFromDb();
+      } catch (err) {
+        console.warn('[HomeScreen] Failed to dismiss assignment:', err);
+      }
+    },
+    [loadFromDb],
+  );
 
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
-        await schemaReady;
-        const [a, e] = await Promise.all([
-          getUpcomingAssignments(),
-          getUpcomingEvents(),
-        ]);
-        if (!active) return;
-        setAssignments(a);
-        setEvents(e);
+        await loadFromDb();
       } catch (err) {
-        console.warn('[HomeScreen] Failed to load data:', err);
+        if (active) console.warn('[HomeScreen] Failed to load data:', err);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, []);
-
-  const highPriorityCount = assignments.filter(
-    (a) => a.urgency_score >= 0.7,
-  ).length;
+  }, [loadFromDb]);
 
   return (
     <View style={styles.root}>
-      <AppHeader subtitle="Home Dashboard" />
+      <AppHeader subtitle="Home Dashboard" onSignOut={onSignOut} />
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
       >
         {/* Greeting card */}
-        <GreetingCard highPriorityCount={highPriorityCount || 2} />
-
-        {/* Schedule timeline */}
-        <ScheduleTimeline events={events} />
+        <GreetingCard dueThisWeek={dueThisWeek} />
 
         {/* AI priority queue */}
-        <AIPriorityQueue assignments={assignments} />
+        <AIPriorityQueue
+          assignments={assignments}
+          onStartTask={onStartTask}
+          onDismiss={onDismissAssignment}
+        />
       </ScrollView>
 
-      <BottomNav active="Home" />
+      <BottomNav active="Home" onSelectTab={onSelectTab} />
     </View>
   );
 }
@@ -392,99 +362,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  greetingTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  greetingHey: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: C.onSurface,
-  },
   greetingDesc: {
     fontSize: 14,
     color: C.onSurfaceVariant,
     marginTop: 4,
     lineHeight: 20,
-  },
-  greetingBold: {
-    color: C.onSurface,
-    fontWeight: '600',
-  },
-  greetingPrimaryHighlight: {
-    color: C.primary,
-    fontWeight: '600',
-  },
-
-  // Chips
-  chipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
-    flexWrap: 'wrap',
-  },
-  chipPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: C.primaryContainer,
-  },
-  chipPrimaryIcon: {
-    fontSize: 14,
-    color: C.white,
-  },
-  chipPrimaryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.white,
-    letterSpacing: 0.2,
-  },
-  chipSecondary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: C.surfaceContainerHigh,
-    borderWidth: 1,
-    borderColor: C.outlineVariant + '4D',
-  },
-  chipSecondaryIcon: {
-    fontSize: 12,
-  },
-  chipSecondaryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.onSurface,
-    letterSpacing: 0.2,
-  },
-  chipTertiary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: C.tertiaryContainer + '4D',
-    borderWidth: 1,
-    borderColor: C.tertiary + '66',
-  },
-  chipTertiaryIcon: {
-    fontSize: 12,
-  },
-  chipTertiaryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.tertiary,
-    letterSpacing: 0.2,
   },
 
   // Sections (shared layout)
@@ -511,34 +393,6 @@ const styles = StyleSheet.create({
   heroHeaderLeft: {
     flex: 1,
     minWidth: 0,
-  },
-  heroRankRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  heroRankBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  heroRankBadgeIcon: {
-    fontSize: 12,
-  },
-  heroRankBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.onErrorContainer,
-    letterSpacing: 0.4,
-  },
-  heroSourceLabel: {
-    fontSize: 11,
-    color: C.onSurfaceVariant,
-    letterSpacing: 0.4,
   },
   heroTitle: {
     fontSize: 20,
@@ -595,43 +449,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: C.onSurface,
     letterSpacing: 0.2,
-  },
-
-  // Progress
-  progressWrap: {
-    gap: 4,
-    marginTop: 4,
-  },
-  progressLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.onSurfaceVariant,
-    letterSpacing: 0.4,
-  },
-  progressPct: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.primary,
-    letterSpacing: 0.4,
-  },
-  progressTrack: {
-    width: '100%',
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.surfaceContainerLowest,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: C.outlineVariant + '33',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-    backgroundColor: C.primaryContainer,
   },
 
   // Suggestion tip
@@ -695,23 +512,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  secondaryRankRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  secondaryRankBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: C.surfaceContainerHigh,
-  },
-  secondaryRankText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: C.onSurfaceVariant,
-    letterSpacing: 0.4,
-  },
   secondaryDueLabel: {
     fontSize: 11,
     color: C.onSurfaceVariant,
@@ -722,10 +522,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.onSurface,
     marginTop: 4,
-  },
-  secondaryCachedIcon: {
-    fontSize: 18,
-    flexShrink: 0,
   },
   secondaryFooter: {
     flexDirection: 'row',

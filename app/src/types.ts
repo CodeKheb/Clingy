@@ -7,6 +7,8 @@ export type CourseworkResponse = {
   title: string;
   description: string | null;
   dueAt: string | null;
+  /** Absent when talking to a backend deployed before this field existed. */
+  turnedIn?: boolean;
   raw: unknown;
 }[];
 

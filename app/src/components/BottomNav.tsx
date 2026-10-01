@@ -1,18 +1,15 @@
-// Shared bottom navigation. The active tab is highlighted with the primary
-// container pill; tap handling is optional so screens can wire navigation in
-// without changing the visuals.
+// Shared bottom navigation. Only real destinations — a tab that routes
+// nowhere is worse than no tab.
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { C } from '../screens/utils/theme';
 
-export type NavTab = 'Home' | 'Schedule' | 'Cling Pet' | 'Offline & Sync';
+export type NavTab = 'Home' | 'Schedule';
 
-const TABS: { label: NavTab; icon: string; badge?: string }[] = [
+const TABS: { label: NavTab; icon: string }[] = [
   { label: 'Home', icon: '🏠' },
   { label: 'Schedule', icon: '📅' },
-  { label: 'Cling Pet', icon: '🐾', badge: '98%' },
-  { label: 'Offline & Sync', icon: '🔒' },
 ];
 
 export function BottomNav({
@@ -40,11 +37,6 @@ export function BottomNav({
                 ]}
               >
                 <Text style={styles.bottomNavIcon}>{tab.icon}</Text>
-                {tab.badge != null && (
-                  <View style={styles.bottomNavBadge}>
-                    <Text style={styles.bottomNavBadgeText}>{tab.badge}</Text>
-                  </View>
-                )}
               </View>
               <Text
                 style={[
@@ -92,7 +84,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   bottomNavIconWrap: {
-    position: 'relative',
     width: 56,
     height: 32,
     borderRadius: 16,
@@ -104,23 +95,6 @@ const styles = StyleSheet.create({
   },
   bottomNavIcon: {
     fontSize: 22,
-  },
-  bottomNavBadge: {
-    position: 'absolute',
-    top: -2,
-    right: 2,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: C.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bottomNavBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: C.white,
   },
   bottomNavLabel: {
     fontSize: 12,

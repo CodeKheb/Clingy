@@ -1,10 +1,10 @@
 // Owner: Person C — the conversational panel opened by tapping the Cling
 // overlay bubble (or the in-app floating fallback). No free text input from
 // the user: Cling "says" a line, the user taps one of a few canned replies.
-// TODO: visual design pass — this is bare functional wiring.
 
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ClingSprite } from '../pet/ClingSprite';
 import {
@@ -14,6 +14,7 @@ import {
   resolveNodeEffects,
   type ConversationSideEffectResult,
 } from '../pet/clingConversation';
+import { C } from './utils/theme';
 
 type Turn = {
   clingSays: string;
@@ -65,9 +66,10 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <ClingSprite animation="idle" scale={0.5} />
+        <Text style={styles.headerTitle}>Cling</Text>
         {onClose && (
           <Pressable style={styles.closeButton} onPress={onClose} hitSlop={12}>
-            <Text style={styles.closeButtonText}>Close</Text>
+            <Ionicons name="close" size={24} color={C.onSurfaceVariant} />
           </Pressable>
         )}
       </View>
@@ -109,19 +111,30 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: C.background,
   },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 16,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.surfaceContainerHigh,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.onSurface,
   },
   closeButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-  },
-  closeButtonText: {
-    color: '#888',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chatArea: {
     flex: 1,
@@ -131,38 +144,45 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bubble: {
-    backgroundColor: '#fff3e8',
-    borderRadius: 12,
+    backgroundColor: C.surfaceContainerHigh,
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
     padding: 12,
     alignSelf: 'flex-start',
     maxWidth: '85%',
   },
   bubbleText: {
     fontSize: 15,
+    color: C.onSurface,
+    lineHeight: 21,
   },
   taskLine: {
     fontSize: 13,
-    color: '#555',
+    color: C.onSurfaceVariant,
     marginTop: 4,
+    lineHeight: 18,
   },
   loading: {
     marginTop: 8,
+    color: C.primary,
   },
   options: {
     padding: 16,
+    paddingBottom: 24,
     gap: 8,
-    borderTopWidth: 1,
-    borderColor: '#eee',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.surfaceContainerHigh,
   },
   optionButton: {
-    backgroundColor: '#ff8c3b',
+    backgroundColor: C.primaryContainer,
     borderRadius: 999,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
   },
   optionText: {
-    color: '#fff',
+    color: C.white,
     fontWeight: '600',
+    fontSize: 15,
   },
 });

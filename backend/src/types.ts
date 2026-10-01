@@ -5,6 +5,7 @@ export type CourseworkResponse = {
   title: string;
   description: string | null;
   dueAt: string | null;
+  turnedIn: boolean;
   raw: unknown;
 }[];
 

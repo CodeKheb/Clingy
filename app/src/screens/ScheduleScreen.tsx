@@ -4,8 +4,8 @@
 // for title + urgency. Layout follows DESIGN.md and reuses the shared design
 // system (src/theme.ts + src/components/) so it matches HomeScreen exactly.
 
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { Badge } from '../components/Badge';
@@ -22,6 +22,7 @@ import {
   getUpcomingEvents,
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
+import { buildProposedSchedule, commitProposedSchedule } from '../scheduling/scheduler';
 import { C, urgencyColor, urgencyLabel } from './utils/theme';
 import {
   dayLabel,
@@ -53,10 +54,16 @@ function PlanSummaryCard({
   blockCount,
   plannedMinutes,
   nextLabel,
+  onRerun,
+  rerunning,
+  rerunError,
 }: {
   blockCount: number;
   plannedMinutes: number;
   nextLabel: string | null;
+  onRerun: () => void;
+  rerunning: boolean;
+  rerunError: string | null;
 }) {
   return (
     <View style={styles.summaryCard}>
@@ -101,10 +108,21 @@ function PlanSummaryCard({
         </View>
       </View>
 
-      <Pressable style={styles.ctaButton}>
-        <Text style={styles.ctaIcon}>🔁</Text>
-        <Text style={styles.ctaText}>Re-run Scheduler</Text>
+      <Pressable
+        style={[styles.ctaButton, rerunning && styles.ctaButtonDisabled]}
+        onPress={onRerun}
+        disabled={rerunning}
+      >
+        {rerunning ? (
+          <ActivityIndicator size="small" color={C.white} />
+        ) : (
+          <Text style={styles.ctaIcon}>🔁</Text>
+        )}
+        <Text style={styles.ctaText}>
+          {rerunning ? 'Scheduling…' : 'Re-run Scheduler'}
+        </Text>
       </Pressable>
+      {rerunError && <Text style={styles.summaryError}>{rerunError}</Text>}
     </View>
   );
 }
@@ -183,48 +201,67 @@ function DayGroup({
 // Main screen
 // ---------------------------------------------------------------------------
 
-export function ScheduleScreen() {
+export type ScheduleScreenProps = {
+  onSelectTab?: (tab: import('../components/BottomNav').NavTab) => void;
+  onSignOut?: () => void;
+};
+
+export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [assignmentsById, setAssignmentsById] = useState<Map<string, Assignment>>(
     new Map(),
   );
   const [nextLabel, setNextLabel] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+  const [rerunError, setRerunError] = useState<string | null>(null);
+
+  const loadFromDb = useCallback(async () => {
+    await schemaReady;
+    const [b, e, a] = await Promise.all([
+      getAllScheduleBlocks(),
+      getUpcomingEvents(),
+      getAllAssignments(),
+    ]);
+    setBlocks(b);
+    setEvents(e);
+    setAssignmentsById(
+      new Map(a.map((assignment) => [assignment.id, assignment])),
+    );
+
+    // "Now" is read here (not during render) to keep the component pure.
+    const now = Date.now();
+    const next =
+      b.find((block) => new Date(block.end_at).getTime() >= now) ?? null;
+    setNextLabel(
+      next ? `${dayLabel(next.start_at)} ${formatTime(next.start_at)}` : null,
+    );
+  }, []);
 
   useEffect(() => {
     let active = true;
-
-    (async () => {
-      try {
-        await schemaReady;
-        const [b, e, a] = await Promise.all([
-          getAllScheduleBlocks(),
-          getUpcomingEvents(),
-          getAllAssignments(),
-        ]);
-        if (!active) return;
-        setBlocks(b);
-        setEvents(e);
-        setAssignmentsById(
-          new Map(a.map((assignment) => [assignment.id, assignment])),
-        );
-
-        // "Now" is read here (not during render) to keep the component pure.
-        const now = Date.now();
-        const next =
-          b.find((block) => new Date(block.end_at).getTime() >= now) ?? null;
-        setNextLabel(
-          next ? `${dayLabel(next.start_at)} ${formatTime(next.start_at)}` : null,
-        );
-      } catch (err) {
-        console.warn('[ScheduleScreen] Failed to load data:', err);
-      }
-    })();
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadFromDb is async; its setState calls run after the microtask queue, not synchronously in this effect body.
+    loadFromDb().catch((err) => {
+      if (active) console.warn('[ScheduleScreen] Failed to load data:', err);
+    });
     return () => {
       active = false;
     };
-  }, []);
+  }, [loadFromDb]);
+
+  const onRerun = useCallback(async () => {
+    setRerunning(true);
+    setRerunError(null);
+    try {
+      const proposed = await buildProposedSchedule();
+      await commitProposedSchedule(proposed);
+      await loadFromDb();
+    } catch (err) {
+      setRerunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRerunning(false);
+    }
+  }, [loadFromDb]);
 
   const plannedMinutes = useMemo(
     () => blocks.reduce((sum, block) => sum + blockMinutes(block), 0),
@@ -253,7 +290,7 @@ export function ScheduleScreen() {
 
   return (
     <View style={styles.root}>
-      <AppHeader subtitle="Study Schedule" />
+      <AppHeader subtitle="Study Schedule" onSignOut={onSignOut} />
 
       <ScrollView
         style={styles.scrollView}
@@ -265,6 +302,9 @@ export function ScheduleScreen() {
           blockCount={blocks.length}
           plannedMinutes={plannedMinutes}
           nextLabel={nextLabel}
+          onRerun={onRerun}
+          rerunning={rerunning}
+          rerunError={rerunError}
         />
 
         {/* Proposed study blocks */}
@@ -307,7 +347,7 @@ export function ScheduleScreen() {
         </View>
       </ScrollView>
 
-      <BottomNav active="Schedule" />
+      <BottomNav active="Schedule" onSelectTab={onSelectTab} />
     </View>
   );
 }
@@ -422,6 +462,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  ctaButtonDisabled: {
+    opacity: 0.7,
+  },
   ctaIcon: {
     fontSize: 16,
     color: C.white,
@@ -431,6 +474,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.white,
     letterSpacing: 0.1,
+  },
+  summaryError: {
+    marginTop: 8,
+    fontSize: 12,
+    color: C.error,
+    textAlign: 'center',
   },
 
   // Sections (shared layout)
@@ -516,69 +565,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 });
-
-import { useCallback, useEffect, useState } from 'react';
-import { Button, FlatList, RefreshControl, Text, View } from 'react-native';
-
-import { getUpcomingScheduleBlocks, type ScheduleBlockWithAssignment } from '../db/queries';
-import { buildProposedSchedule, commitProposedSchedule } from '../scheduling/scheduler';
-
-export function ScheduleScreen() {
-  const [blocks, setBlocks] = useState<ScheduleBlockWithAssignment[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadFromDb = useCallback(async () => {
-    setBlocks(await getUpcomingScheduleBlocks());
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    getUpcomingScheduleBlocks().then((rows) => {
-      if (!cancelled) setBlocks(rows);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const onGenerate = useCallback(async () => {
-    setRefreshing(true);
-    setError(null);
-    try {
-      const proposed = await buildProposedSchedule();
-      await commitProposedSchedule(proposed);
-      await loadFromDb();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadFromDb]);
-
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={{ padding: 12 }}>
-        <Button title="Schedule study time" onPress={onGenerate} disabled={refreshing} />
-      </View>
-      {error && <Text style={{ color: 'red', padding: 8 }}>{error}</Text>}
-      <FlatList
-        style={{ flex: 1 }}
-        data={blocks}
-        keyExtractor={(item) => item.id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadFromDb} />}
-        renderItem={({ item }) => (
-          <View style={{ padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}>
-            <Text style={{ fontWeight: '600' }}>{item.assignment_title}</Text>
-            <Text>
-              {new Date(item.start_at).toLocaleString()} - {new Date(item.end_at).toLocaleTimeString()}
-            </Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={{ padding: 16 }}>No study blocks yet — tap &ldquo;Schedule study time&rdquo; to generate some.</Text>
-        }
-      />
-    </View>
-  );
-}

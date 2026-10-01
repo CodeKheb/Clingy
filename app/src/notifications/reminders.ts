@@ -1,1 +1,88 @@
 // Owner: Person B — expo-notifications scheduled from SQLite deadlines.
+//
+// Local (device-only) notifications, no push/server round-trip: one for each
+// upcoming assignment's due date, one for each proposed study block's start
+// time. Re-synced from scratch on every call (cancel-all then
+// reschedule-all) rather than diffed, since the data volumes here are small
+// (a handful of assignments/blocks) and this avoids tracking which
+// notification ids correspond to which row across syncs.
+
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+import { getUpcomingAssignments, getUpcomingScheduleBlocks } from '../db/queries';
+
+const CHANNEL_ID = 'deadlines';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+async function ensureChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: 'Deadlines & study blocks',
+    importance: Notifications.AndroidImportance.HIGH,
+  });
+}
+
+/** Requests notification permission if not already granted/denied. Returns whether reminders can be scheduled. */
+export async function ensureNotificationPermission(): Promise<boolean> {
+  const current = await Notifications.getPermissionsAsync();
+  if (current.granted) return true;
+  const requested = await Notifications.requestPermissionsAsync();
+  return requested.granted;
+}
+
+function dateTrigger(date: Date): Notifications.DateTriggerInput {
+  return { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: CHANNEL_ID };
+}
+
+/**
+ * Cancels every previously scheduled reminder and schedules fresh ones from
+ * SQLite: each upcoming assignment's due date and each saved study block's
+ * start time. Reading both from the DB (rather than taking arguments) means
+ * it's safe to call after syncNow() and after commitProposedSchedule()
+ * without one wiping the other's reminders. Silently no-ops if permission
+ * isn't granted — reminders never block the data pipeline.
+ */
+export async function rescheduleReminders(): Promise<void> {
+  const [assignments, blocks] = await Promise.all([getUpcomingAssignments(), getUpcomingScheduleBlocks()]);
+  const granted = await ensureNotificationPermission();
+  if (!granted) return;
+
+  await ensureChannel();
+  await Notifications.cancelAllScheduledNotificationsAsync();
+
+  const now = Date.now();
+
+  for (const assignment of assignments) {
+    if (!assignment.due_at) continue;
+    const dueAt = new Date(assignment.due_at);
+    if (dueAt.getTime() <= now) continue;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Deadline coming up',
+        body: assignment.title,
+      },
+      trigger: dateTrigger(dueAt),
+    });
+  }
+
+  for (const block of blocks) {
+    const startAt = new Date(block.start_at);
+    if (startAt.getTime() <= now) continue;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Study time',
+        body: block.assignment_title,
+      },
+      trigger: dateTrigger(startAt),
+    });
+  }
+}

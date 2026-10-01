@@ -3,7 +3,17 @@
 // for each assignment, and upserts everything into SQLite (schema.ts).
 
 import { getStoredTokens, refreshAccessToken } from '../auth/googleAuth';
-import { upsertAssignments, upsertCourses, upsertEvents, updatePetMood } from '../db/queries';
+import {
+  deleteAssignment,
+  deleteEvent,
+  getAllAssignments,
+  getAllEvents,
+  upsertAssignments,
+  upsertCourses,
+  upsertEvents,
+  updatePetMood,
+} from '../db/queries';
+import { rescheduleReminders } from '../notifications/reminders';
 import { moodFromScores } from '../pet/moodAggregation';
 import { scorePriority } from '../priority';
 import type { CalendarEventResponse, CourseworkResponse } from '../types';
@@ -71,10 +81,11 @@ export async function syncNow(): Promise<SyncResult> {
     const events = (await eventsRes.json()) as CalendarEventResponse;
 
     // Classroom's courseWork.list() returns full history with no date filter,
-    // so keep only items with a known due date that's now or later.
+    // so keep only items with a known due date that's now or later, and skip
+    // work the student already handed in.
     const now = Date.now();
     const coursework = allCoursework.filter(
-      (item) => item.dueAt !== null && new Date(item.dueAt).getTime() >= now,
+      (item) => item.dueAt !== null && new Date(item.dueAt).getTime() >= now && !item.turnedIn,
     );
 
     const courses = new Map<string, string>();
@@ -115,10 +126,23 @@ export async function syncNow(): Promise<SyncResult> {
       })),
     );
 
+    // Upserts never remove rows, so prune anything the server no longer returns
+    // (deleted, handed in, or past due). Study blocks cascade with their assignment.
+    const keptAssignmentIds = new Set(scored.map((a) => a.id));
+    for (const row of await getAllAssignments()) {
+      if (!keptAssignmentIds.has(row.id)) await deleteAssignment(row.id);
+    }
+    const keptEventIds = new Set(events.map((e) => e.id));
+    for (const row of await getAllEvents()) {
+      if (!keptEventIds.has(row.id)) await deleteEvent(row.id);
+    }
+
     const mood = moodFromScores(
       scored.map((a) => ({ urgencyScore: a.urgency_score, suggestedMinutes: a.suggested_minutes })),
     );
     await updatePetMood(mood);
+
+    await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
 
     return { ok: true, assignmentCount: scored.length, eventCount: events.length };
   } catch (e) {

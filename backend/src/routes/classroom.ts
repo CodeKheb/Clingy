@@ -23,6 +23,24 @@ classroomRouter.get("/coursework", async (req, res) => {
 
     for (const course of courses.data.courses ?? []) {
       const coursework = await classroom.courses.courseWork.list({ courseId: course.id! });
+
+      // courseWorkId "-" lists the student's submissions across the whole course in one call.
+      // Best-effort: if it fails, nothing is marked handed in rather than failing the request.
+      const handedIn = new Set<string>();
+      try {
+        const submissions = await classroom.courses.courseWork.studentSubmissions.list({
+          courseId: course.id!,
+          courseWorkId: "-",
+          userId: "me",
+        });
+        for (const sub of submissions.data.studentSubmissions ?? []) {
+          if (sub.courseWorkId && (sub.state === "TURNED_IN" || sub.state === "RETURNED")) {
+            handedIn.add(sub.courseWorkId);
+          }
+        }
+      } catch (error: any) {
+        console.error("Error fetching submissions:", error?.message || error);
+      }
       for (const work of coursework.data.courseWork ?? []) {
         let dueAt: string | null = null;
         if (work.dueDate) {
@@ -41,6 +59,7 @@ classroomRouter.get("/coursework", async (req, res) => {
           title: work.title ?? "",
           description: work.description ?? null,
           dueAt,
+          turnedIn: handedIn.has(work.id!),
           raw: work,
         });
       }

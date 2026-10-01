@@ -1,15 +1,29 @@
-// Shared top app bar: Cling mascot + screen subtitle on the left, vault/profile
-// badges on the right. Every screen renders it with its own subtitle so the
+// Shared top app bar: Cling mascot + screen subtitle on the left, profile
+// (sign-out) on the right. Every screen renders it with its own subtitle so the
 // header stays identical across the app.
 
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { C } from '../screens/utils/theme';
 
 const MASCOT_HEADER =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuC97rLKyUV9Wq7oaCGF96bKM-ZcZFwDaOf_anr1pkPschcoSZHzOTCWMgO2vHdPdvNBQ4ubL7gkKTnrh-7oCVahglHJFxPzYl2LI6yBs0iEzDWY81DGZwzEo97rkMht-CH8l6fsvu3KRp0Hh8k0uJkHgW0OLzQqFMXLG1hi2HeApmcMZPmp0QxpOuKIqblB6nN-n_JkK-dIQ-3bjoPEE5OeuqkqsT7BvpGojbwl-zsXaKTQAX53DRxjz2htIdVL9IfalA';
 
-export function AppHeader({ subtitle }: { subtitle: string }) {
+export function AppHeader({
+  subtitle,
+  onSignOut,
+}: {
+  subtitle: string;
+  onSignOut?: () => void;
+}) {
+  const handleProfilePress = () => {
+    if (!onSignOut) return;
+    Alert.alert('Sign out', 'Sign out of Clingy?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: onSignOut },
+    ]);
+  };
+
   return (
     <View style={styles.header}>
       <View style={styles.headerInner}>
@@ -24,15 +38,16 @@ export function AppHeader({ subtitle }: { subtitle: string }) {
           </View>
         </View>
 
-        {/* Right: shield badge + profile */}
+        {/* Right: profile / sign-out */}
         <View style={styles.headerRight}>
-          <View style={styles.shieldBadge}>
-            <Text style={styles.shieldIcon}>🛡️</Text>
-            <Text style={styles.shieldLabel}>Vault Encrypted</Text>
-          </View>
-          <View style={styles.profileCircle}>
+          <Pressable
+            style={styles.profileCircle}
+            onPress={handleProfilePress}
+            hitSlop={8}
+            accessibilityLabel="Sign out"
+          >
             <Text style={styles.profileIcon}>👤</Text>
-          </View>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -96,26 +111,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 0,
-  },
-  shieldBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: C.surfaceContainerHigh,
-    borderWidth: 1,
-    borderColor: C.outlineVariant + '4D',
-  },
-  shieldIcon: {
-    fontSize: 12,
-  },
-  shieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.onSurfaceVariant,
-    letterSpacing: 0.4,
   },
   profileCircle: {
     width: 32,
