@@ -3,19 +3,20 @@
 // the user: Cling "says" a line, the user taps one of a few canned replies.
 
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ClingSprite } from '../pet/ClingSprite';
+import { ClingFace } from '../components/ClingFace';
 import {
   CONVERSATION,
   ROOT_NODE_ID,
   resolveEntryNode,
   resolveNodeEffects,
   type ConversationSideEffectResult,
+  type TaskSummary,
 } from '../pet/clingConversation';
-import { C } from './utils/theme';
+import { C, urgencyColor } from './utils/theme';
 
 type Turn =
   | { role: 'cling'; clingSays: string; extra?: ConversationSideEffectResult }
@@ -25,10 +26,92 @@ export type ClingPanelProps = {
   onClose?: () => void;
 };
 
-function ClingAvatar({ size, scale }: { size: number; scale: number }) {
+// An icon per reply so the list reads at a glance; anything unlisted gets a plain arrow.
+const OPTION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  'Show my tasks': 'list-outline',
+  'I need to study': 'book-outline',
+  "What's next?": 'flash-outline',
+  "I'm busy at a certain time": 'calendar-clear-outline',
+  'Schedule study time for these': 'sparkles-outline',
+  'Schedule study time': 'sparkles-outline',
+  'Yes, go ahead': 'checkmark-circle-outline',
+  'Pick the day and time': 'calendar-outline',
+  'Another time': 'add-circle-outline',
+  Back: 'arrow-back-outline',
+  'Not now': 'close-circle-outline',
+  'Thanks!': 'happy-outline',
+  Nice: 'happy-outline',
+};
+
+function dueText(dueAt: string | null): string {
+  if (!dueAt) return 'No due date';
+  const due = new Date(dueAt);
+  const days = Math.round((due.getTime() - Date.now()) / 86400000);
+  const date = due.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  if (days <= 0) return `Due today · ${date}`;
+  if (days === 1) return `Due tomorrow · ${date}`;
+  return `Due in ${days} days · ${date}`;
+}
+
+const minutesText = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m}m`);
+
+/** New messages ease in instead of popping. */
+function FadeIn({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
+  const [anim] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    Animated.timing(anim, { toValue: 1, duration: 240, useNativeDriver: true }).start();
+  }, [anim]);
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
-      <ClingSprite animation="idle" scale={scale} />
+    <Animated.View
+      style={[style, { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+function TypingDots() {
+  const [dots] = useState(() => [new Animated.Value(0.3), new Animated.Value(0.3), new Animated.Value(0.3)]);
+  useEffect(() => {
+    const loops = dots.map((d, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(d, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+          Animated.delay((2 - i) * 160),
+        ]),
+      ),
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [dots]);
+  return (
+    <View style={styles.typingRow}>
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={[styles.typingDot, { opacity: d }]} />
+      ))}
+    </View>
+  );
+}
+
+function ClingAvatar({ size }: { size: number }) {
+  return <ClingFace size={size} animated />;
+}
+
+function TaskRow({ task }: { task: TaskSummary }) {
+  return (
+    <View style={styles.taskCard}>
+      <View style={[styles.taskBar, { backgroundColor: urgencyColor(task.urgency) }]} />
+      <View style={styles.taskBody}>
+        <Text style={styles.taskTitle} numberOfLines={2}>
+          {task.title}
+        </Text>
+        <Text style={styles.taskMeta}>
+          {dueText(task.dueAt)}
+          {task.minutes > 0 ? `  ·  ~${minutesText(task.minutes)}` : ''}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -81,16 +164,16 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <ClingAvatar size={52} scale={0.38} />
+          <ClingAvatar size={44} />
           <View style={styles.onlineDot} />
         </View>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Cling</Text>
-          <Text style={styles.headerSubtitle}>Your study buddy</Text>
+          <Text style={styles.headerSubtitle}>Your study buddy · online</Text>
         </View>
         {onClose && (
           <Pressable style={styles.closeButton} onPress={onClose} hitSlop={12}>
-            <Ionicons name="close" size={22} color={C.onSurfaceVariant} />
+            <Ionicons name="close" size={20} color={C.onSurfaceVariant} />
           </Pressable>
         )}
       </View>
@@ -99,27 +182,30 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
         ref={scrollRef}
         style={styles.chatArea}
         contentContainerStyle={styles.chatContent}
+        showsVerticalScrollIndicator={false}
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
       >
-        {history.map((turn, i) =>
-          turn.role === 'user' ? (
-            <View key={i} style={[styles.bubble, styles.userBubble]}>
-              <Text style={styles.userBubbleText}>{turn.text}</Text>
-            </View>
-          ) : (
-            <View key={i} style={styles.clingRow}>
-              <ClingAvatar size={32} scale={0.2} />
-              <View style={[styles.bubble, styles.clingBubble]}>
+        {history.map((turn, i) => {
+          if (turn.role === 'user') {
+            return (
+              <FadeIn key={i} style={styles.userRow}>
+                <View style={styles.userBubble}>
+                  <Text style={styles.userBubbleText}>{turn.text}</Text>
+                </View>
+              </FadeIn>
+            );
+          }
+          // Only the last message in a run of Cling messages shows the avatar; the rest keep its space.
+          const showAvatar = history[i + 1]?.role !== 'cling' && !(loading && i === history.length - 1);
+          return (
+            <FadeIn key={i} style={styles.clingRow}>
+              <View style={styles.avatarSlot}>{showAvatar ? <ClingAvatar size={30} /> : null}</View>
+              <View style={styles.clingBubble}>
                 <Text style={styles.bubbleText}>{turn.clingSays}</Text>
                 {turn.extra?.assignmentSummary && (
                   <View style={styles.taskList}>
-                    {turn.extra.assignmentSummary.map((title) => (
-                      <View key={title} style={styles.taskRow}>
-                        <View style={styles.taskDot} />
-                        <Text style={styles.taskText} numberOfLines={2}>
-                          {title}
-                        </Text>
-                      </View>
+                    {turn.extra.assignmentSummary.map((task) => (
+                      <TaskRow key={task.title} task={task} />
                     ))}
                   </View>
                 )}
@@ -132,28 +218,34 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
                   </View>
                 )}
               </View>
-            </View>
-          ),
-        )}
+            </FadeIn>
+          );
+        })}
         {loading && (
-          <View style={styles.clingRow}>
-            <ClingAvatar size={32} scale={0.2} />
-            <View style={[styles.bubble, styles.clingBubble, styles.typingBubble]}>
-              <ActivityIndicator size="small" color={C.primary} />
+          <FadeIn style={styles.clingRow}>
+            <View style={styles.avatarSlot}>
+              <ClingAvatar size={30} />
             </View>
-          </View>
+            <View style={[styles.clingBubble, styles.typingBubble]}>
+              <TypingDots />
+            </View>
+          </FadeIn>
         )}
       </ScrollView>
 
       {!loading && (
-        <View style={[styles.options, { paddingBottom: 20 + insets.bottom }]}>
+        <View style={[styles.options, { paddingBottom: 14 + insets.bottom }]}>
           {currentNode.options.map((option) => (
             <Pressable
               key={option.label}
-              style={({ pressed }) => [styles.optionChip, pressed && styles.optionChipPressed]}
+              style={({ pressed }) => [styles.optionRow, pressed && styles.optionRowPressed]}
               onPress={() => selectOption(option.label, option.next)}
             >
+              <View style={styles.optionIcon}>
+                <Ionicons name={OPTION_ICONS[option.label] ?? 'arrow-forward-outline'} size={18} color={C.primary} />
+              </View>
               <Text style={styles.optionText}>{option.label}</Text>
+              <Ionicons name="chevron-forward" size={16} color={C.onSurfaceVariant} />
             </Pressable>
           ))}
         </View>
@@ -169,71 +261,77 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: C.surfaceContainerLow,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.outlineVariant,
   },
   headerText: { flex: 1 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: C.onSurface },
-  headerSubtitle: { fontSize: 12, color: C.onSurfaceVariant, marginTop: 1 },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: C.onSurface },
+  headerSubtitle: { fontSize: 12, color: C.secondary, marginTop: 1 },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: C.surfaceContainerHigh,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatar: {
-    backgroundColor: C.surfaceContainerHigh,
-    borderWidth: 1.5,
-    borderColor: C.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
   },
   onlineDot: {
     position: 'absolute',
     right: 0,
-    bottom: 2,
-    width: 12,
-    height: 12,
+    bottom: 1,
+    width: 11,
+    height: 11,
     borderRadius: 6,
     backgroundColor: C.secondary,
     borderWidth: 2,
     borderColor: C.surfaceContainerLow,
   },
   chatArea: { flex: 1 },
-  chatContent: { padding: 16, gap: 12 },
-  clingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, maxWidth: '92%' },
-  bubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  chatContent: { padding: 16, gap: 10 },
+  clingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, maxWidth: '94%' },
+  avatarSlot: { width: 30, height: 30 },
   clingBubble: {
     flexShrink: 1,
     backgroundColor: C.surfaceContainerHigh,
-    borderBottomLeftRadius: 4,
+    borderRadius: 18,
+    borderBottomLeftRadius: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
   },
-  userBubble: {
-    alignSelf: 'flex-end',
-    maxWidth: '80%',
-    backgroundColor: C.primaryContainer,
-    borderBottomRightRadius: 4,
-  },
-  typingBubble: { paddingVertical: 12, paddingHorizontal: 18 },
   bubbleText: { fontSize: 15, color: C.onSurface, lineHeight: 21 },
-  userBubbleText: { fontSize: 15, color: C.white, fontWeight: '600', lineHeight: 21 },
-  taskList: { marginTop: 8, gap: 6 },
-  taskRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  taskDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary, marginTop: 7 },
-  taskText: { flexShrink: 1, fontSize: 13, color: C.onSurfaceVariant, lineHeight: 19 },
+  userRow: { alignSelf: 'flex-end', maxWidth: '78%' },
+  userBubble: {
+    backgroundColor: C.primaryContainer,
+    borderRadius: 18,
+    borderBottomRightRadius: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  userBubbleText: { fontSize: 14.5, color: C.white, fontWeight: '600', lineHeight: 20 },
+  typingBubble: { paddingVertical: 15, paddingHorizontal: 16 },
+  typingRow: { flexDirection: 'row', gap: 5 },
+  typingDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.onSurfaceVariant },
+  taskList: { marginTop: 10, gap: 8 },
+  taskCard: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: C.surfaceContainerLowest,
+  },
+  taskBar: { width: 4 },
+  taskBody: { flex: 1, paddingVertical: 9, paddingHorizontal: 12 },
+  taskTitle: { fontSize: 13.5, fontWeight: '600', color: C.onSurface, lineHeight: 18 },
+  taskMeta: { fontSize: 11.5, color: C.onSurfaceVariant, marginTop: 3 },
   successChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     alignSelf: 'flex-start',
-    marginTop: 8,
+    marginTop: 10,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: C.surfaceContainerLowest,
   },
@@ -242,20 +340,27 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 20,
     backgroundColor: C.surfaceContainerLow,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.outlineVariant,
   },
-  optionChip: {
+  optionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: C.primaryContainer,
-    backgroundColor: C.surfaceContainer,
+    gap: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: C.surfaceContainerHigh,
   },
-  optionChipPressed: { backgroundColor: C.primaryContainer },
-  optionText: { color: C.primary, fontWeight: '600', fontSize: 14 },
+  optionRowPressed: { backgroundColor: C.surfaceContainerHighest },
+  optionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: C.surfaceContainerHighest,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionText: { flex: 1, color: C.onSurface, fontWeight: '600', fontSize: 14.5 },
 });

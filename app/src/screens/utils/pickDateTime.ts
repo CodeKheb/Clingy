@@ -6,15 +6,23 @@ import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 const CHOOSE_TIMES = Symbol('choose-times');
 
 // The default Android dialogs ignore a title, so say which step this is with a short toast instead.
-function pick(
+const settle = () => new Promise<void>((r) => setTimeout(r, 350)); // let the previous dialog finish closing
+
+async function pick(
   mode: 'date' | 'time',
   value: Date,
   hint: string,
   options: { minimumDate?: Date; timesButton?: boolean } = {},
 ): Promise<Date | typeof CHOOSE_TIMES | null> {
+  await settle();
   ToastAndroid.show(hint, ToastAndroid.SHORT);
   return new Promise((resolve) => {
-    DateTimePickerAndroid.open({
+    const finish = (result: Date | typeof CHOOSE_TIMES | null) => {
+      console.log(`[picker] ${mode} dialog result:`, result instanceof Date ? result.toISOString() : String(result));
+      resolve(result);
+    };
+    try {
+      DateTimePickerAndroid.open({
       mode,
       value,
       minimumDate: options.minimumDate,
@@ -24,18 +32,23 @@ function pick(
             // Confirm = block whole days (keeps the chosen until-day); the side button switches to exact times.
             positiveButton: { label: 'All day' },
             neutralButton: { label: 'Choose times' },
-            onNeutralButtonPress: () => resolve(CHOOSE_TIMES),
+            onNeutralButtonPress: () => finish(CHOOSE_TIMES),
           }
         : {}),
-      onValueChange: (_event, date) => resolve(date),
-      onDismiss: () => resolve(null),
+      onValueChange: (_event, date) => finish(date),
+      onDismiss: () => finish(null),
       // Without this the library swallows the failure and the caller would wait forever.
       onError: (error) => {
         console.warn('[picker] could not open the dialog:', error);
         ToastAndroid.show("Couldn't open the date picker", ToastAndroid.LONG);
-        resolve(null);
+        finish(null);
       },
-    });
+      });
+    } catch (error) {
+      console.warn('[picker] open() threw:', error);
+      ToastAndroid.show("Couldn't open the date picker", ToastAndroid.LONG);
+      finish(null);
+    }
   });
 }
 

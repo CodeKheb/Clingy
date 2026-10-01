@@ -12,6 +12,7 @@ import {
   type Assignment,
 } from '../db/queries';
 import { rescheduleReminders } from '../notifications/reminders';
+import { pushStudyBlocksToCalendar } from '../sync/calendarPush';
 import { planSessions } from '../priority/taskProfile';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,6 +50,22 @@ export async function markUnavailableAndReschedule(startAt: string, endAt: strin
 // --- Pinned blocks: times the student chose themselves ----------------------------
 
 const PINS_KEY = 'pinned_blocks';
+
+export type BusyWindow = { start: number; end: number };
+
+/** Saved busy times that haven't ended yet, soonest first. */
+export async function getUnavailableWindows(): Promise<BusyWindow[]> {
+  return (await loadUnavailable(Date.now())).sort((a, b) => a.start - b.start);
+}
+
+/** Removes the given busy times (all of them when none are given) and rebuilds the schedule. */
+export async function removeUnavailableWindows(toRemove?: BusyWindow[]): Promise<void> {
+  const keep = toRemove
+    ? (await loadUnavailable(Date.now())).filter((w) => !toRemove.some((r) => r.start === w.start && r.end === w.end))
+    : [];
+  await setMeta(UNAVAILABLE_KEY, JSON.stringify(keep));
+  await commitProposedSchedule(await buildProposedSchedule());
+}
 
 export type Pin = { assignmentId: string; start: number; end: number };
 
@@ -90,6 +107,41 @@ export async function moveBlock(block: BlockRef, newStartMs: number): Promise<vo
 /** Hands a pinned block back to the scheduler. */
 export async function unpinBlock(block: BlockRef): Promise<void> {
   const start = new Date(block.start_at).getTime();
+  const pins = (await loadPins(Date.now())).filter(
+    (p) => !(p.assignmentId === block.assignment_id && p.start === start),
+  );
+  await setMeta(PINS_KEY, JSON.stringify(pins));
+  await commitProposedSchedule(await buildProposedSchedule());
+}
+
+// --- Finished sessions -----------------------------------------------------------
+
+const DONE_KEY = 'done_minutes';
+
+async function loadDone(): Promise<Record<string, number>> {
+  try {
+    return JSON.parse((await getMeta(DONE_KEY)) ?? '{}') as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+/** Study minutes already finished per assignment id, for showing progress. */
+export async function getDoneMinutes(): Promise<Record<string, number>> {
+  return loadDone();
+}
+
+/**
+ * Marks a session as finished: its minutes count toward the assignment's total, the block leaves the
+ * schedule, and the remaining sessions re-plan around what's left (no more sessions once it's covered).
+ */
+export async function markBlockDone(block: BlockRef): Promise<void> {
+  const start = new Date(block.start_at).getTime();
+  const minutes = Math.round((new Date(block.end_at).getTime() - start) / 60000);
+  const done = await loadDone();
+  done[block.assignment_id] = (done[block.assignment_id] ?? 0) + minutes;
+  await setMeta(DONE_KEY, JSON.stringify(done));
+  // A pinned block that is now finished must not be placed again.
   const pins = (await loadPins(Date.now())).filter(
     (p) => !(p.assignmentId === block.assignment_id && p.start === start),
   );
@@ -180,6 +232,7 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
 
   const blocks: ProposedBlock[] = [];
   const pins = await loadPins(now);
+  const doneMinutes = await loadDone();
 
   // Time already claimed per day (earlier assignments' sessions plus gaps),
   // and minutes of study per day, shared across all assignments.
@@ -224,7 +277,8 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
   }
 
   for (const assignment of sorted) {
-    const remainingMinutes = assignment.suggested_minutes - (pinnedMinutes.get(assignment.id) ?? 0);
+    const remainingMinutes =
+      assignment.suggested_minutes - (pinnedMinutes.get(assignment.id) ?? 0) - (doneMinutes[assignment.id] ?? 0);
     if (remainingMinutes < MIN_SLOT_MINUTES) continue;
     const sessions = planSessions(remainingMinutes);
 
@@ -285,7 +339,9 @@ export async function commitProposedSchedule(blocks: ProposedBlock[]): Promise<v
       end_at: b.endAt,
     })),
   );
-  void rescheduleReminders(); // background: scheduling dozens of notifications shouldn't hold up the UI
+  // Background: neither dozens of notifications nor Google Calendar calls should hold up the UI.
+  void rescheduleReminders();
+  void pushStudyBlocksToCalendar();
 }
 
 export type { Assignment };

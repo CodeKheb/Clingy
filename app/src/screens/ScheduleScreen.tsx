@@ -26,7 +26,9 @@ import { schemaReady } from '../db/schema';
 import {
   buildProposedSchedule,
   commitProposedSchedule,
+  getDoneMinutes,
   getPinnedKeys,
+  markBlockDone,
   markUnavailableAndReschedule,
   moveBlock,
   pinKey,
@@ -146,12 +148,18 @@ function BlockCard({
   assignment,
   sessionLabel,
   pinned,
+  doneMinutes,
+  canMarkDone,
+  onDone,
   onMenu,
 }: {
   block: ScheduleBlock;
   assignment?: Assignment;
   sessionLabel?: string;
   pinned?: boolean;
+  doneMinutes?: number;
+  canMarkDone?: boolean;
+  onDone?: (block: ScheduleBlock) => void;
   onMenu?: (block: ScheduleBlock) => void;
 }) {
   const accent = assignment
@@ -191,22 +199,37 @@ function BlockCard({
           </View>
           {assignment && assignment.suggested_minutes > 0 ? (
             <Text style={styles.blockMetaText}>
-              Est. {durationEstimate(assignment.suggested_minutes)}
+              {doneMinutes
+                ? `${durationEstimate(doneMinutes)} done of ${durationEstimate(assignment.suggested_minutes)}`
+                : `Est. ${durationEstimate(assignment.suggested_minutes)}`}
             </Text>
           ) : null}
         </View>
       </View>
 
-      {onMenu ? (
-        <Pressable
-          style={styles.blockMenuButton}
-          onPress={() => onMenu(block)}
-          hitSlop={8}
-          accessibilityLabel="Block options"
-        >
-          <Ionicons name="ellipsis-vertical" size={18} color={C.onSurfaceVariant} />
-        </Pressable>
-      ) : null}
+      <View style={styles.blockSide}>
+        {onMenu ? (
+          <Pressable
+            style={styles.blockMenuButton}
+            onPress={() => onMenu(block)}
+            hitSlop={8}
+            accessibilityLabel="Block options"
+          >
+            <Ionicons name="ellipsis-vertical" size={18} color={C.onSurfaceVariant} />
+          </Pressable>
+        ) : null}
+        {canMarkDone && onDone ? (
+          <Pressable
+            style={styles.doneButton}
+            onPress={() => onDone(block)}
+            hitSlop={6}
+            accessibilityLabel="Mark this session as done"
+          >
+            <Ionicons name="checkmark" size={16} color={C.onTertiary} />
+            <Text style={styles.doneButtonText}>Done</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -217,6 +240,9 @@ function DayGroup({
   assignmentsById,
   sessionLabels: labels,
   pinnedKeys,
+  doneMinutes,
+  firstBlockId,
+  onDone,
   onMenu,
 }: {
   label: string;
@@ -224,6 +250,9 @@ function DayGroup({
   assignmentsById: Map<string, Assignment>;
   sessionLabels: Map<string, string>;
   pinnedKeys: Set<string>;
+  doneMinutes: Record<string, number>;
+  firstBlockId: string | null;
+  onDone?: (block: ScheduleBlock) => void;
   onMenu?: (block: ScheduleBlock) => void;
 }) {
   return (
@@ -236,6 +265,9 @@ function DayGroup({
           assignment={assignmentsById.get(block.assignment_id)}
           sessionLabel={labels.get(block.id)}
           pinned={pinnedKeys.has(pinKey(block.assignment_id, block.start_at))}
+          doneMinutes={doneMinutes[block.assignment_id]}
+          canMarkDone={block.id === firstBlockId}
+          onDone={onDone}
           onMenu={onMenu}
         />
       ))}
@@ -266,19 +298,23 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
   const [menuBlock, setMenuBlock] = useState<ScheduleBlock | null>(null);
   const [arrangeTarget, setArrangeTarget] = useState<{ day: Date; blockId?: string } | null>(null);
   const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(new Set());
+  const [doneMinutes, setDoneMinutes] = useState<Record<string, number>>({});
+  const [firstBlockId, setFirstBlockId] = useState<string | null>(null);
   const [nextLabel, setNextLabel] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
 
   const loadFromDb = useCallback(async () => {
     await schemaReady;
-    const [b, e, a, pins] = await Promise.all([
+    const [b, e, a, pins, done] = await Promise.all([
       getAllScheduleBlocks(),
       getUpcomingEvents(),
       getAllAssignments(),
       getPinnedKeys(),
+      getDoneMinutes(),
     ]);
     setPinnedKeys(pins);
+    setDoneMinutes(done);
     setBlocks(b);
     setEvents(e);
     setAssignmentsById(
@@ -289,6 +325,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     const now = Date.now();
     const next =
       b.find((block) => new Date(block.end_at).getTime() >= now) ?? null;
+    setFirstBlockId(next?.id ?? null);
     setNextLabel(
       next ? `${dayLabel(next.start_at)} ${formatTime(next.start_at)}` : null,
     );
@@ -352,6 +389,8 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     },
     [runReschedule],
   );
+
+  const onDone = useCallback((block: ScheduleBlock) => runReschedule(() => markBlockDone(block)), [runReschedule]);
 
   const onUnpin = useCallback((block: ScheduleBlock) => runReschedule(() => unpinBlock(block)), [runReschedule]);
 
@@ -430,6 +469,9 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
                 assignmentsById={assignmentsById}
                 sessionLabels={sessionLabelsById}
                 pinnedKeys={pinnedKeys}
+                doneMinutes={doneMinutes}
+                firstBlockId={firstBlockId}
+                onDone={(block) => void onDone(block)}
                 onMenu={setMenuBlock}
               />
             ))
@@ -489,6 +531,9 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  blockSide: { alignItems: 'flex-end', gap: 6 },
+  doneButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 10, marginRight: 6, borderRadius: 999, backgroundColor: C.tertiary },
+  doneButtonText: { fontSize: 12, fontWeight: '700', color: C.onTertiary },
   blockMenuButton: { alignSelf: 'flex-start', padding: 10 },
   blockSessionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary },

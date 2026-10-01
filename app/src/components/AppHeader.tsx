@@ -3,14 +3,13 @@
 // header stays identical across the app.
 
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { C } from '../screens/utils/theme';
+import { ClingFace } from './ClingFace';
 import { SettingsSheet } from './SettingsSheet';
 
-const MASCOT_HEADER =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuC97rLKyUV9Wq7oaCGF96bKM-ZcZFwDaOf_anr1pkPschcoSZHzOTCWMgO2vHdPdvNBQ4ubL7gkKTnrh-7oCVahglHJFxPzYl2LI6yBs0iEzDWY81DGZwzEo97rkMht-CH8l6fsvu3KRp0Hh8k0uJkHgW0OLzQqFMXLG1hi2HeApmcMZPmp0QxpOuKIqblB6nN-n_JkK-dIQ-3bjoPEE5OeuqkqsT7BvpGojbwl-zsXaKTQAX53DRxjz2htIdVL9IfalA';
 
 export function AppHeader({
   subtitle,
@@ -26,9 +25,12 @@ export function AppHeader({
       <View style={styles.headerInner}>
         {/* Left: Mascot + Title */}
         <View style={styles.headerLeft}>
-          <View style={styles.headerAvatarWrap}>
-            <Image source={{ uri: MASCOT_HEADER }} style={styles.headerAvatar} />
-          </View>
+          <ClingFace
+            size={36}
+            backgroundColor={C.surfaceContainerHighest + 'CC'}
+            borderColor={C.primary + '4D'}
+            borderWidth={1}
+          />
           <View>
             <Text style={styles.headerTitle}>Cling</Text>
             <Text style={styles.headerSubtitle}>{subtitle}</Text>
@@ -76,22 +78,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 1,
-  },
-  headerAvatarWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.surfaceContainerHighest + 'CC',
-    borderWidth: 1,
-    borderColor: C.primary + '4D',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
   },
   headerTitle: {
     fontSize: 16,

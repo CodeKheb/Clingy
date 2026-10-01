@@ -89,8 +89,10 @@ export const CONVERSATION: Record<string, ConversationNode> = {
   },
 };
 
+export type TaskSummary = { title: string; dueAt: string | null; urgency: number; minutes: number };
+
 export type ConversationSideEffectResult = {
-  assignmentSummary?: string[];
+  assignmentSummary?: TaskSummary[];
   proposedBlocks?: ProposedBlock[];
   /** Replaces the node's static line when what happened differs from the happy path. */
   clingSaysOverride?: string;
@@ -105,11 +107,15 @@ export async function resolveNodeEffects(nodeId: string): Promise<ConversationSi
   if (nodeId === 'show_tasks' || nodeId === 'whats_next') {
     const assignments = await getUpcomingAssignments();
     if (assignments.length === 0) return {};
-    const summary =
-      nodeId === 'whats_next'
-        ? [assignments[0].title]
-        : assignments.slice(0, 5).map((a) => a.title);
-    return { assignmentSummary: summary };
+    const shown = nodeId === 'whats_next' ? assignments.slice(0, 1) : assignments.slice(0, 5);
+    return {
+      assignmentSummary: shown.map((a) => ({
+        title: a.title,
+        dueAt: a.due_at,
+        urgency: a.urgency_score,
+        minutes: a.suggested_minutes,
+      })),
+    };
   }
 
   if (nodeId === 'schedule_confirmed') {

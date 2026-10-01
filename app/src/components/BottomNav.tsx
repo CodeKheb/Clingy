@@ -2,14 +2,15 @@
 // nowhere is worse than no tab.
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { C } from '../screens/utils/theme';
 
 export type NavTab = 'Home' | 'Schedule';
 
-const TABS: { label: NavTab; icon: string }[] = [
-  { label: 'Home', icon: '🏠' },
-  { label: 'Schedule', icon: '📅' },
+const TABS: { label: NavTab; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }[] = [
+  { label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { label: 'Schedule', icon: 'calendar-outline', activeIcon: 'calendar' },
 ];
 
 export function BottomNav({
@@ -36,7 +37,7 @@ export function BottomNav({
                   isActive && styles.bottomNavIconWrapActive,
                 ]}
               >
-                <Text style={styles.bottomNavIcon}>{tab.icon}</Text>
+                <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={22} color={isActive ? C.primary : C.onSurfaceVariant} />
               </View>
               <Text
                 style={[

@@ -182,7 +182,6 @@ function AppContent() {
                 void stopBackgroundSync();
                 setSignedIn(false);
               }}
-              onStartTask={() => setPanelOpen(true)}
             />
           ) : (
             <ScheduleScreen

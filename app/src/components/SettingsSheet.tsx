@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { enableOverlay, isOverlayRunning, isOverlaySupported, stopOverlay } from '../pet/overlayBridge';
 import { C } from '../screens/utils/theme';
+import { isCalendarPushEnabled, setCalendarPushEnabled } from '../sync/calendarPush';
+import { BusyTimesSheet } from './BusyTimesSheet';
 
 export function SettingsSheet({
   visible,
@@ -19,8 +21,21 @@ export function SettingsSheet({
 }) {
   const insets = useSafeAreaInsets();
   const [overlayOn, setOverlayOn] = useState(false);
+  const [busyOpen, setBusyOpen] = useState(false);
+  const [calendarOn, setCalendarOn] = useState(true);
 
   // The overlay can be dismissed from outside the app (dragged onto the X), so read the live state on open.
+  useEffect(() => {
+    if (!visible) return;
+    let active = true;
+    void isCalendarPushEnabled().then((on) => {
+      if (active) setCalendarOn(on);
+    });
+    return () => {
+      active = false;
+    };
+  }, [visible]);
+
   useEffect(() => {
     if (!visible || !isOverlaySupported) return;
     let active = true;
@@ -31,6 +46,11 @@ export function SettingsSheet({
       active = false;
     };
   }, [visible]);
+
+  const toggleCalendar = (next: boolean) => {
+    setCalendarOn(next);
+    void setCalendarPushEnabled(next);
+  };
 
   const toggleOverlay = async (next: boolean) => {
     if (!next) {
@@ -82,6 +102,33 @@ export function SettingsSheet({
           </View>
         )}
 
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <Ionicons name="calendar-outline" size={20} color={C.primary} />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Google Calendar</Text>
+            <Text style={styles.rowHint}>Show your study blocks on your Google Calendar. Turning it off removes them.</Text>
+          </View>
+          <Switch
+            value={calendarOn}
+            onValueChange={toggleCalendar}
+            trackColor={{ false: C.surfaceContainerHighest, true: C.primaryContainer }}
+            thumbColor={C.white}
+          />
+        </View>
+
+        <Pressable style={styles.row} onPress={() => setBusyOpen(true)}>
+          <View style={styles.rowIcon}>
+            <Ionicons name="calendar-clear-outline" size={20} color={C.primary} />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Busy times</Text>
+            <Text style={styles.rowHint}>See and remove times you blocked off</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={C.onSurfaceVariant} />
+        </Pressable>
+
         {onSignOut && (
           <Pressable style={[styles.row, styles.rowDanger]} onPress={confirmSignOut}>
             <View style={[styles.rowIcon, styles.rowIconDanger]}>
@@ -94,6 +141,7 @@ export function SettingsSheet({
         )}
         </View>
       </View>
+      <BusyTimesSheet visible={busyOpen} onClose={() => setBusyOpen(false)} />
     </Modal>
   );
 }

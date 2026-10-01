@@ -6,18 +6,23 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
+
 import { signInWithGoogle, type StoredTokens } from '../auth/googleAuth';
+import { ClingSprite } from '../pet/ClingSprite';
 import { C } from './utils/theme';
 
-const MASCOT_LOGIN =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAuIQJRjaMKnlJ4foJqyoYXkPPNZqZ0VwJZ8sBI_cfOp1h3zK0VcPE6L-yAL5yG7ptv93fxOoEtqo9E37K6JcDcLmXga2Z-HMHbvaP63hpcVKsdf3LhgL2MBL41IHUUDiwHUB-JYYkBJlP85_3xisINRc2U_zmeyOnjXAAVE7sgzGwRehuiHcu6g6MSFl4aAQPS_xE_UpqFXkyDLlGzqYrowWRJAV8rGRM8ZMr665PG5zOv8K9lKT2gwVMmzh0f1xrj1g';
+const FEATURES: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { icon: 'alarm-outline', label: 'Deadline reminders' },
+  { icon: 'calendar-outline', label: 'Smart study plan' },
+  { icon: 'cloud-offline-outline', label: 'Works offline' },
+];
 
 export type LoginScreenProps = {
   onSignedIn: (tokens: StoredTokens) => void;
@@ -51,8 +56,8 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
       <View style={styles.heroGlow} />
 
       <View style={styles.hero}>
-        {/* Mascot logo (transparent, no frame) */}
-        <Image source={{ uri: MASCOT_LOGIN }} style={styles.mascotImg} />
+        {/* Mascot: the bundled transparent sprite, so it sits on the background with no frame and works offline */}
+        <ClingSprite animation="idle" scale={1.5} />
 
         {/* Wordmark + tagline */}
         <Text style={styles.title}>Clingy</Text>
@@ -60,6 +65,15 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
           Your offline study companion. Cling keeps your deadlines, schedule, and
           focus in one place — even without a signal.
         </Text>
+
+        <View style={styles.features}>
+          {FEATURES.map((f) => (
+            <View key={f.label} style={styles.feature}>
+              <Ionicons name={f.icon} size={14} color={C.primary} />
+              <Text style={styles.featureText}>{f.label}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -73,7 +87,7 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
           {signingIn ? (
             <ActivityIndicator size="small" color={C.white} />
           ) : (
-            <Text style={styles.googleIcon}>G</Text>
+            <Ionicons name="logo-google" size={18} color={C.white} />
           )}
           <Text style={styles.googleText}>
             {signingIn ? 'Connecting…' : 'Sign in with Google'}
@@ -113,11 +127,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
   },
-  mascotImg: {
-    width: 176,
-    height: 176,
-    resizeMode: 'contain',
+  features: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 },
+  feature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: C.surfaceContainer,
   },
+  featureText: { fontSize: 12, fontWeight: '600', color: C.onSurfaceVariant },
   title: {
     fontSize: 32,
     fontWeight: '700',
@@ -146,11 +166,6 @@ const styles = StyleSheet.create({
   },
   googleButtonDisabled: {
     opacity: 0.7,
-  },
-  googleIcon: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: C.white,
   },
   googleText: {
     fontSize: 15,

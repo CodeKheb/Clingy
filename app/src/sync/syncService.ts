@@ -2,7 +2,7 @@
 // Fetches from the backend (CONTRACT.md API shapes), calls priority.scorePriority()
 // for each assignment, and upserts everything into SQLite (schema.ts).
 
-import { getStoredTokens, refreshAccessToken } from '../auth/googleAuth';
+import { authorizedFetch } from './authorizedFetch';
 import {
   deleteAssignment,
   deleteEvent,
@@ -26,40 +26,6 @@ import { TASK_TYPES, type TaskType } from '../priority/taskProfile';
 import type { CalendarEventResponse, CourseworkResponse } from '../types';
 
 export const LAST_SYNCED_KEY = 'last_synced_at';
-
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-
-function requireBackendUrl(): string {
-  if (!BACKEND_URL) {
-    throw new Error('[sync] EXPO_PUBLIC_BACKEND_URL is not set — see app/.env.example');
-  }
-  return BACKEND_URL;
-}
-
-async function authorizedFetch(path: string): Promise<Response> {
-  const backendUrl = requireBackendUrl();
-  let tokens = await getStoredTokens();
-  if (!tokens) {
-    throw new Error('[sync] not signed in — no stored tokens');
-  }
-
-  let response = await fetch(`${backendUrl}${path}`, {
-    headers: { Authorization: `Bearer ${tokens.accessToken}` },
-  });
-
-  // Access tokens expire; retry once after a refresh (CONTRACT.md /auth/refresh).
-  if (response.status === 401 && tokens.refreshToken) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      tokens = refreshed;
-      response = await fetch(`${backendUrl}${path}`, {
-        headers: { Authorization: `Bearer ${tokens.accessToken}` },
-      });
-    }
-  }
-
-  return response;
-}
 
 export type SyncResult =
   | { ok: true; assignmentCount: number; eventCount: number }
@@ -87,7 +53,10 @@ export async function syncNow(): Promise<SyncResult> {
     }
 
     const allCoursework = (await courseworkRes.json()) as CourseworkResponse;
-    const events = (await eventsRes.json()) as CalendarEventResponse;
+    // Study blocks Cling added to the calendar must not count as busy time (the backend filters them too).
+    const events = ((await eventsRes.json()) as CalendarEventResponse).filter(
+      (event) => (event.raw as { extendedProperties?: { private?: { clingy?: string } } } | null)?.extendedProperties?.private?.clingy !== '1',
+    );
 
     // Classroom's courseWork.list() returns full history with no date filter,
     // so keep only items with a known due date that's now or later, and skip
