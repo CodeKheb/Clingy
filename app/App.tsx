@@ -1,15 +1,15 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { initPriorityScorer } from './src/priority';
 import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
-import type { ClingMood } from './src/pet/PetWidget';
 import { PetScreen } from './src/screens/PetScreen';
+import { useClingMood } from './src/pet/useClingMood';
 
 export default function App() {
-  const [mood] = useState<ClingMood>('neutral');
+  const mood = useClingMood();
 
   useEffect(() => {
     // Async: loads the MiniLM model + precomputes anchor embeddings. Falls back
