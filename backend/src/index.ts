@@ -17,7 +17,12 @@ app.use("/auth", authRouter);
 app.use("/classroom", classroomRouter);
 app.use("/calendar", calendarRouter);
 
-const port = process.env.PORT ?? 4000;
-app.listen(port, () => {
-  console.log(`backend listening on :${port}`);
-});
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  const port = process.env.PORT ?? 4000;
+  app.listen(port, () => {
+    console.log(`backend listening on :${port}`);
+  });
+}
+
+export default app;
+

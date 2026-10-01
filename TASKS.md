@@ -5,33 +5,33 @@ Live checklist. Check items off as you go so everyone can see progress without a
 ## Hour 1 — Setup
 - [x] Agree on `CONTRACT.md` contents (all three)
 - [x] Person A: Google Cloud Console project + OAuth consent screen + scopes
-- [ ] Person A: publish mock JSON fixture matching `CONTRACT.md` response shapes
-- [ ] Person B: SQLite schema created, migrations run
-- [ ] Person C: heuristic priority scorer working against `CONTRACT.md` interface
+- [x] Person A: publish mock JSON fixture matching `CONTRACT.md` response shapes
+- [x] Person B: SQLite schema created, migrations run
+- [x] Person C: heuristic priority scorer working against `CONTRACT.md` interface
 
 ## P0 — Core data pipeline
-- [ ] (A) `/auth/google/url`, `/auth/google/callback`, `/auth/refresh`
-- [ ] (A) `/classroom/coursework`, `/calendar/events`
-- [ ] (B) app-side Google OAuth screen, token storage
-- [ ] (B) sync service: fetch from backend, upsert into SQLite
+- [x] (A) `/auth/google/url`, `/auth/google/callback`, `/auth/refresh`
+- [x] (A) `/classroom/coursework`, `/calendar/events`
+- [x] (B) app-side Google OAuth screen, token storage
+- [x] (B) sync service: fetch from backend, upsert into SQLite
 - [ ] (B) background sync interval
-- [ ] (B) HomeScreen renders assignments/events from SQLite, works offline
+- [x] (B) HomeScreen renders assignments/events from SQLite, works offline
 
 ## P0 — Reminders & scheduling
-- [ ] (C) heuristic scorer: `scorePriority()` implemented and unit-tested
-- [ ] (B) scheduler: allocate `suggestedMinutes` into free calendar slots
+- [x] (C) heuristic scorer: `scorePriority()` implemented and unit-tested
+- [x] (B) scheduler: allocate `suggestedMinutes` into free calendar slots
 - [ ] (B) notifications: scheduled from SQLite deadlines
-- [ ] (B) ScheduleScreen renders proposed time blocks
+- [x] (B) ScheduleScreen renders proposed time blocks
 
 ## P1 — On-device ML (stretch on top of heuristic)
-- [ ] (C) TFLite classifier integrated behind `scorePriority()`, feature-flagged
-- [ ] (C) fallback verified: flag off → heuristic still works
+- [x] (C) TFLite classifier integrated behind `scorePriority()`, feature-flagged
+- [x] (C) fallback verified: flag off → heuristic still works
 
 ## P1 — Cling (mascot widget)
-- [ ] (C) in-app floating Cling fallback (build this first)
-- [ ] (C) native overlay bubble (timeboxed, 2-3 hrs max)
-- [ ] (C) PetScreen with Cling's mood states/animations
-- [ ] (B/C) mood aggregation wired to real urgency scores
+- [x] (C) in-app floating Cling fallback (build this first)
+- [x] (C) native overlay bubble (timeboxed, 2-3 hrs max)
+- [x] (C) PetScreen with Cling's mood states/animations
+- [x] (B/C) mood aggregation wired to real urgency scores
 
 ## P2 — Stretch
 - [ ] Manual schedule entry UI

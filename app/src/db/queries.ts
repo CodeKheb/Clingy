@@ -293,6 +293,7 @@ export async function getUpcomingAssignments(database?: SQLiteDatabase): Promise
   return await db.getAllAsync<Assignment>(
     `SELECT assignments.*, (SELECT vector FROM embeddings WHERE entity_type = 'assignment' AND entity_id = assignments.id ORDER BY created_at DESC LIMIT 1) AS embedding
      FROM assignments
+     WHERE due_at IS NOT NULL AND julianday(due_at) >= julianday('now')
      ORDER BY urgency_score DESC, due_at ASC NULLS LAST;`
   );
 }
@@ -477,6 +478,24 @@ export async function getAllScheduleBlocks(database?: SQLiteDatabase): Promise<S
   return await db.getAllAsync<ScheduleBlock>(
     `SELECT schedule_blocks.*, (SELECT vector FROM embeddings WHERE entity_type = 'schedule_block' AND entity_id = schedule_blocks.id ORDER BY created_at DESC LIMIT 1) AS embedding
      FROM schedule_blocks ORDER BY start_at ASC;`,
+  );
+}
+
+export type ScheduleBlockWithAssignment = ScheduleBlock & { assignment_title: string };
+
+export async function getUpcomingScheduleBlocks(
+  nowIso: string = new Date().toISOString(),
+  database?: SQLiteDatabase
+): Promise<ScheduleBlockWithAssignment[]> {
+  const db = await getDb(database);
+  return await db.getAllAsync<ScheduleBlockWithAssignment>(
+    `SELECT schedule_blocks.*, assignments.title AS assignment_title,
+       (SELECT vector FROM embeddings WHERE entity_type = 'schedule_block' AND entity_id = schedule_blocks.id ORDER BY created_at DESC LIMIT 1) AS embedding
+     FROM schedule_blocks
+     JOIN assignments ON assignments.id = schedule_blocks.assignment_id
+     WHERE schedule_blocks.end_at >= ?
+     ORDER BY schedule_blocks.start_at ASC;`,
+    nowIso
   );
 }
 

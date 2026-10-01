@@ -17,3 +17,11 @@ export type CalendarEventResponse = {
   endAt: string;
   raw: unknown;
 }[];
+
+export type AuthUrlResponse = { url: string };
+
+export type AuthTokenResponse = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt: string | null;
+};

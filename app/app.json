@@ -3,6 +3,7 @@
     "name": "Clingy",
     "slug": "clingy",
     "version": "1.0.0",
+    "scheme": "clingy",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,20 +11,23 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.clingy",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.clingy"
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      "expo-web-browser",
+      "expo-secure-store",
+      "./plugins/overlay"
     ]
   }
 }
