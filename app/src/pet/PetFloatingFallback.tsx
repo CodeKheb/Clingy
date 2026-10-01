@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Animated, Dimensions, PanResponder, StyleSheet } from 'react-native';
 
 import { ClingSprite } from './ClingSprite';
-import { CLING_NATIVE_HEIGHT } from './clingFrames';
+import { CLING_NATIVE_HEIGHT, CLING_NATIVE_WIDTH } from './clingFrames';
 import { PetWidget, type ClingMood } from './PetWidget';
 
 export type PetFloatingFallbackProps = {
@@ -17,11 +17,12 @@ export type PetFloatingFallbackProps = {
 
 // Floating bubble renders smaller than the full-size PetScreen display.
 const FLOATING_SCALE = 0.6;
+const WIDGET_WIDTH = CLING_NATIVE_WIDTH * FLOATING_SCALE;
 const WIDGET_HEIGHT = CLING_NATIVE_HEIGHT * FLOATING_SCALE;
-const EDGE_MARGIN = -10; // Cling sticks to the edge, slightly overhanging it per style notes
+const EDGE_MARGIN = -WIDGET_WIDTH * 0.32; // Cling sits just off-screen, its hand touching the edge
 
 export function PetFloatingFallback({ mood, onPress, initialTop }: PetFloatingFallbackProps) {
-  const { height: screenHeight } = Dimensions.get('window');
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const [dockedRight, setDockedRight] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [snapping, setSnapping] = useState(false);
@@ -50,7 +51,15 @@ export function PetFloatingFallback({ mood, onPress, initialTop }: PetFloatingFa
         setDragging(false);
         setSnapping(true);
 
-        const draggedToRight = gesture.dx + gesture.vx * 40 > 0;
+        // Decide the dock side by where Cling actually ended up on screen (its
+        // center X vs. the screen midpoint), not by gesture direction/velocity —
+        // otherwise a small flick from one edge snaps it all the way across.
+        const dockedLeftEdgeX = dockedRight
+          ? screenWidth - EDGE_MARGIN - WIDGET_WIDTH
+          : EDGE_MARGIN;
+        const currentLeftEdgeX = dockedLeftEdgeX + gesture.dx;
+        const currentCenterX = currentLeftEdgeX + WIDGET_WIDTH / 2;
+        const draggedToRight = currentCenterX > screenWidth / 2;
         setDockedRight(draggedToRight);
 
         const releasedY = dockedYBox.current + gesture.dy;
@@ -60,7 +69,8 @@ export function PetFloatingFallback({ mood, onPress, initialTop }: PetFloatingFa
         Animated.spring(pan, {
           toValue: { x: 0, y: clampedY },
           useNativeDriver: false,
-          friction: 6,
+          friction: 8,
+          tension: 40,
         }).start(() => setSnapping(false));
       },
     }),

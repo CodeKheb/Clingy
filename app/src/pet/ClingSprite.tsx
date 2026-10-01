@@ -46,7 +46,6 @@ export function ClingSprite({ animation, loop = true, onAnimationEnd, scale = 1,
         if (next >= frames.length) {
           if (!loop) {
             clearInterval(interval);
-            onAnimationEndRef.current?.();
             return prev;
           }
           return 0;
@@ -56,6 +55,19 @@ export function ClingSprite({ animation, loop = true, onAnimationEnd, scale = 1,
     }, frameDuration);
     return () => clearInterval(interval);
   }, [animation, frames.length, frameDuration, loop]);
+
+  const isLastFrame = !loop && frameIndex === frames.length - 1;
+  const notifiedRef = useRef(false);
+
+  useEffect(() => {
+    if (isLastFrame && !notifiedRef.current) {
+      notifiedRef.current = true;
+      onAnimationEndRef.current?.();
+    }
+    if (!isLastFrame) {
+      notifiedRef.current = false;
+    }
+  }, [isLastFrame]);
 
   const source = frames[frameIndex] ?? frames[0];
   const width = CLING_NATIVE_WIDTH * scale;
