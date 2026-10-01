@@ -8,10 +8,10 @@ import { C } from '../screens/utils/theme';
 
 export type NavTab = 'Home' | 'Schedule' | 'Cling Pet' | 'Offline & Sync';
 
-const TABS: { label: NavTab; icon: string; badge?: string }[] = [
+const TABS: { label: NavTab; icon: string }[] = [
   { label: 'Home', icon: '🏠' },
   { label: 'Schedule', icon: '📅' },
-  { label: 'Cling Pet', icon: '🐾', badge: '98%' },
+  { label: 'Cling Pet', icon: '🐾' },
   { label: 'Offline & Sync', icon: '🔒' },
 ];
 
