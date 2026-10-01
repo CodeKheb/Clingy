@@ -13,6 +13,8 @@ export type ClingWidgetProps = {
   onPress: () => void;
   scale?: number;
   flipX?: boolean;
+  /** Plays this animation instead of the mood's (a tap still wins). */
+  animationOverride?: ClingAnimationName;
 };
 
 const MOOD_ANIMATION: Record<ClingMood, ClingAnimationName> = {
@@ -25,7 +27,7 @@ const MOOD_ANIMATION: Record<ClingMood, ClingAnimationName> = {
 // PetWidget is the mood-driven mascot visual: it loops the animation for the
 // current mood, and plays a one-shot "poke" reaction on tap before calling
 // onPress (opens the Cling panel).
-export function PetWidget({ mood, onPress, scale = 1, flipX = false }: ClingWidgetProps) {
+export function PetWidget({ mood, onPress, scale = 1, flipX = false, animationOverride }: ClingWidgetProps) {
   const [poking, setPoking] = useState(false);
 
   const handlePress = () => {
@@ -33,7 +35,7 @@ export function PetWidget({ mood, onPress, scale = 1, flipX = false }: ClingWidg
     onPress();
   };
 
-  const animation: ClingAnimationName = poking ? 'poke' : MOOD_ANIMATION[mood];
+  const animation: ClingAnimationName = poking ? 'poke' : (animationOverride ?? MOOD_ANIMATION[mood]);
 
   return (
     <Pressable onPress={handlePress} hitSlop={12}>

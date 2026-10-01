@@ -7,7 +7,9 @@ import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text,
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { Assignment, Event as CalendarEvent, ScheduleBlock } from '../db/queries';
+import { findClassOverlap } from '../classes/occurrences';
+import { formatMinutes } from '../classes/time';
+import type { Assignment, ClassMeeting, Event as CalendarEvent, ScheduleBlock } from '../db/queries';
 import { moveBlock, pinKey } from '../scheduling/scheduler';
 import { RescheduleOverlay } from '../components/RescheduleOverlay';
 import { C } from './utils/theme';
@@ -147,6 +149,7 @@ export function ArrangeModal({
   onClose,
   blocks,
   events,
+  classes,
   assignmentsById,
   pinnedKeys,
   onMoved,
@@ -156,6 +159,7 @@ export function ArrangeModal({
   onClose: () => void;
   blocks: ScheduleBlock[];
   events: CalendarEvent[];
+  classes: ClassMeeting[];
   assignmentsById: Map<string, Assignment>;
   pinnedKeys: Set<string>;
   onMoved: () => Promise<void> | void;
@@ -180,6 +184,7 @@ export function ArrangeModal({
     () => events.filter((e) => sameDay(new Date(e.start_at), day)),
     [events, day],
   );
+  const dayClasses = useMemo(() => classes.filter((c) => c.day_of_week === day.getDay()), [classes, day]);
   const countByDay = useMemo(
     () => days.map((d) => blocks.filter((b) => sameDay(new Date(b.start_at), d)).length),
     [blocks, days],
@@ -220,6 +225,13 @@ export function ArrangeModal({
     if (newStart.getTime() < Date.now()) {
       settle({ kind: 'back' });
       ToastAndroid.show('That time has already passed', ToastAndroid.SHORT);
+      return;
+    }
+
+    const clash = findClassOverlap(classes, newStart.getTime(), newStart.getTime() + durationMin * 60000);
+    if (clash) {
+      settle({ kind: 'back' });
+      ToastAndroid.show(`That overlaps your ${clash.subject} class`, ToastAndroid.SHORT);
       return;
     }
 
@@ -298,6 +310,24 @@ export function ArrangeModal({
                 </View>
               );
             })}
+            {dayClasses.map((c) => {
+              const top = Math.max(0, ((c.start_minutes - START_HOUR * 60) / 60) * HOUR_HEIGHT);
+              const bottom = Math.min(GRID_HEIGHT, ((c.end_minutes - START_HOUR * 60) / 60) * HOUR_HEIGHT);
+              if (bottom <= 0 || top >= GRID_HEIGHT || bottom <= top) return null;
+              return (
+                <View key={`class-${c.id}`} pointerEvents="none" style={[styles.classBlock, { top, height: bottom - top }]}>
+                  <Text style={styles.classText} numberOfLines={1}>
+                    {c.subject}
+                    {c.room ? ` · ${c.room}` : ''}
+                  </Text>
+                  {bottom - top >= TWO_LINE_MIN_HEIGHT ? (
+                    <Text style={styles.classTime} numberOfLines={1}>
+                      {formatMinutes(c.start_minutes)} – {formatMinutes(c.end_minutes)}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
             {dayBlocks.map((b) => (
               <DraggableBlock
                 key={b.id}
@@ -356,6 +386,20 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   eventText: { fontSize: 11, color: C.onSurfaceVariant },
+  classBlock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: C.secondary,
+    backgroundColor: C.secondaryContainer + '2E',
+  },
+  classText: { fontSize: 11, fontWeight: '700', color: C.secondary },
+  classTime: { fontSize: 10, color: C.secondary, opacity: 0.8 },
   block: {
     position: 'absolute',
     left: 8,

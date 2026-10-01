@@ -11,6 +11,7 @@ import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
 import { setOverlayAppForeground, setOverlayMood } from './src/pet/overlayBridge';
 import { useClingMood } from './src/pet/useClingMood';
+import { useClingNudge } from './src/pet/useClingNudge';
 import { ClassScreen } from './src/screens/ClassScreen';
 import { ClingPanel } from './src/screens/ClingPanel';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -44,6 +45,7 @@ export default function App() {
 
 function AppContent() {
   const mood = useClingMood();
+  const nudge = useClingNudge();
   const insets = useSafeAreaInsets();
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null = still checking
   const [panelOpen, setPanelOpen] = useState(false);
@@ -223,7 +225,7 @@ function AppContent() {
         />
       )}
       {!panelOpen && (
-        <PetFloatingFallback mood={mood} onPress={() => setPanelOpen(true)} bottomInset={insets.bottom} />
+        <PetFloatingFallback mood={mood} onPress={() => setPanelOpen(true)} bottomInset={insets.bottom} nudge={nudge} />
       )}
       <StatusBar style="auto" />
     </View>

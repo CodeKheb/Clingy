@@ -6,7 +6,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { Badge } from '../components/Badge';
@@ -16,12 +16,15 @@ import { EventTimeline } from '../components/EventTimeline';
 import { SectionHeader } from '../components/SectionHeader';
 import {
   type Assignment,
+  type ClassMeeting,
   type Event as CalEvent,
   type ScheduleBlock,
   getAllAssignments,
+  getAllClassMeetings,
   getAllScheduleBlocks,
   getUpcomingEvents,
 } from '../db/queries';
+import { findClassOverlap } from '../classes/occurrences';
 import { schemaReady } from '../db/schema';
 import {
   buildProposedSchedule,
@@ -287,6 +290,7 @@ export type ScheduleScreenProps = {
 export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) {
   const [blocks, setBlocks] = useState<ScheduleBlock[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [classes, setClasses] = useState<ClassMeeting[]>([]);
   const [assignmentsById, setAssignmentsById] = useState<Map<string, Assignment>>(
     new Map(),
   );
@@ -306,9 +310,10 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 
   const loadFromDb = useCallback(async () => {
     await schemaReady;
-    const [b, e, a, pins, done] = await Promise.all([
+    const [b, e, c, a, pins, done] = await Promise.all([
       getAllScheduleBlocks(),
       getUpcomingEvents(),
+      getAllClassMeetings(),
       getAllAssignments(),
       getPinnedKeys(),
       getDoneMinutes(),
@@ -317,6 +322,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     setDoneMinutes(done);
     setBlocks(b);
     setEvents(e);
+    setClasses(c);
     setAssignmentsById(
       new Map(a.map((assignment) => [assignment.id, assignment])),
     );
@@ -385,9 +391,15 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     async (block: ScheduleBlock) => {
       const target = await pickMoment(new Date(block.start_at));
       if (!target) return;
+      const durationMs = new Date(block.end_at).getTime() - new Date(block.start_at).getTime();
+      const clash = findClassOverlap(classes, target.getTime(), target.getTime() + durationMs);
+      if (clash) {
+        ToastAndroid.show(`That overlaps your ${clash.subject} class`, ToastAndroid.SHORT);
+        return;
+      }
       await runReschedule(() => moveBlock(block, target.getTime()));
     },
-    [runReschedule],
+    [runReschedule, classes],
   );
 
   const onDone = useCallback((block: ScheduleBlock) => runReschedule(() => markBlockDone(block)), [runReschedule]);
@@ -516,6 +528,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
           onClose={() => setArrangeTarget(null)}
           blocks={blocks}
           events={events}
+          classes={classes}
           assignmentsById={assignmentsById}
           pinnedKeys={pinnedKeys}
           onMoved={() => void loadFromDb()}

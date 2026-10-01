@@ -6,6 +6,8 @@ import { Animated, Dimensions, PanResponder, StyleSheet } from 'react-native';
 
 import { ClingSprite } from './ClingSprite';
 import { CLING_NATIVE_HEIGHT, CLING_NATIVE_WIDTH } from './clingFrames';
+import { NudgeBubble } from './NudgeBubble';
+import type { Nudge } from './nudgeText';
 import { PetWidget, type ClingMood } from './PetWidget';
 
 export type PetFloatingFallbackProps = {
@@ -15,6 +17,8 @@ export type PetFloatingFallbackProps = {
   initialTop?: number;
   /** Safe-area inset so Cling can't be dragged under a bottom nav bar/home indicator. */
   bottomInset?: number;
+  /** Something for Cling to say right now, shown in a speech bubble beside it. */
+  nudge?: Nudge | null;
 };
 
 // The floating bubble renders at 60% of the sprite's native size.
@@ -23,9 +27,11 @@ const WIDGET_WIDTH = CLING_NATIVE_WIDTH * FLOATING_SCALE;
 const WIDGET_HEIGHT = CLING_NATIVE_HEIGHT * FLOATING_SCALE;
 const EDGE_MARGIN = -WIDGET_WIDTH * 0.32; // Cling sits just off-screen, its hand touching the edge
 
-export function PetFloatingFallback({ mood, onPress, initialTop, bottomInset = 0 }: PetFloatingFallbackProps) {
+export function PetFloatingFallback({ mood, onPress, initialTop, bottomInset = 0, nudge = null }: PetFloatingFallbackProps) {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
   const maxTop = screenHeight - WIDGET_HEIGHT - bottomInset;
+  // The sprite's visible part is WIDGET_WIDTH + EDGE_MARGIN wide; the bubble sits just inside that.
+  const bubbleWidth = Math.min(240, screenWidth - (WIDGET_WIDTH + EDGE_MARGIN) - 24);
   const [dockedRight, setDockedRight] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [snapping, setSnapping] = useState(false);
@@ -97,7 +103,16 @@ export function PetFloatingFallback({ mood, onPress, initialTop, bottomInset = 0
         <ClingSprite animation="snap" loop={false} scale={FLOATING_SCALE} flipX={!dockedRight} />
       )}
       {!dragging && !snapping && (
-        <PetWidget mood={mood} onPress={onPress} scale={FLOATING_SCALE} flipX={!dockedRight} />
+        <PetWidget
+          mood={mood}
+          onPress={onPress}
+          scale={FLOATING_SCALE}
+          flipX={!dockedRight}
+          animationOverride={nudge?.animation}
+        />
+      )}
+      {nudge && !dragging && !snapping && (
+        <NudgeBubble key={nudge.key} text={nudge.text} width={bubbleWidth} height={WIDGET_HEIGHT} side={dockedRight ? 'right' : 'left'} offset={WIDGET_WIDTH + 4} />
       )}
     </Animated.View>
   );

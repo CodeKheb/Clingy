@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { enableOverlay, isOverlayRunning, isOverlaySupported, stopOverlay } from '../pet/overlayBridge';
 import { C } from '../screens/utils/theme';
+import { isNudgesEnabled, setNudgesEnabled } from '../pet/useClingNudge';
 import { isCalendarPushEnabled, setCalendarPushEnabled } from '../sync/calendarPush';
 import { BusyTimesSheet } from './BusyTimesSheet';
 
@@ -23,6 +24,7 @@ export function SettingsSheet({
   const [overlayOn, setOverlayOn] = useState(false);
   const [busyOpen, setBusyOpen] = useState(false);
   const [calendarOn, setCalendarOn] = useState(true);
+  const [nudgesOn, setNudgesOn] = useState(true);
 
   // The overlay can be dismissed from outside the app (dragged onto the X), so read the live state on open.
   useEffect(() => {
@@ -30,6 +32,9 @@ export function SettingsSheet({
     let active = true;
     void isCalendarPushEnabled().then((on) => {
       if (active) setCalendarOn(on);
+    });
+    void isNudgesEnabled().then((on) => {
+      if (active) setNudgesOn(on);
     });
     return () => {
       active = false;
@@ -50,6 +55,11 @@ export function SettingsSheet({
   const toggleCalendar = (next: boolean) => {
     setCalendarOn(next);
     void setCalendarPushEnabled(next);
+  };
+
+  const toggleNudges = (next: boolean) => {
+    setNudgesOn(next);
+    void setNudgesEnabled(next);
   };
 
   const toggleOverlay = async (next: boolean) => {
@@ -113,6 +123,22 @@ export function SettingsSheet({
           <Switch
             value={calendarOn}
             onValueChange={toggleCalendar}
+            trackColor={{ false: C.surfaceContainerHighest, true: C.primaryContainer }}
+            thumbColor={C.white}
+          />
+        </View>
+
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <Ionicons name="chatbubble-ellipses-outline" size={20} color={C.primary} />
+          </View>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Cling nudges</Text>
+            <Text style={styles.rowHint}>Let Cling pop up now and then with reminders, class alerts and bedtime nags.</Text>
+          </View>
+          <Switch
+            value={nudgesOn}
+            onValueChange={toggleNudges}
             trackColor={{ false: C.surfaceContainerHighest, true: C.primaryContainer }}
             thumbColor={C.white}
           />

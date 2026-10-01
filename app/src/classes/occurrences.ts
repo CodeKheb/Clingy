@@ -21,3 +21,19 @@ export function expandClassOccurrences<T extends Meeting>(meetings: T[], now: nu
   }
   return out;
 }
+
+/** The class a time range runs into (local time, within one day), or null if it is clear of them all. */
+export function findClassOverlap<T extends Meeting & { subject: string }>(
+  meetings: T[],
+  startMs: number,
+  endMs: number,
+): T | null {
+  const start = new Date(startMs);
+  const startMinutes = start.getHours() * 60 + start.getMinutes();
+  const endMinutes = startMinutes + (endMs - startMs) / 60000;
+  return (
+    meetings.find(
+      (m) => m.day_of_week === start.getDay() && startMinutes < m.end_minutes && endMinutes > m.start_minutes,
+    ) ?? null
+  );
+}

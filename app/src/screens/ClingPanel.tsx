@@ -13,6 +13,7 @@ import {
   ROOT_NODE_ID,
   resolveEntryNode,
   resolveNodeEffects,
+  type ClassSummary,
   type ConversationSideEffectResult,
   type TaskSummary,
 } from '../pet/clingConversation';
@@ -31,6 +32,9 @@ const OPTION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   'Show my tasks': 'list-outline',
   'I need to study': 'book-outline',
   "What's next?": 'flash-outline',
+  'My classes': 'school-outline',
+  "Tomorrow's classes": 'arrow-forward-circle-outline',
+  "Today's classes": 'arrow-back-circle-outline',
   "I'm busy at a certain time": 'calendar-clear-outline',
   'Schedule study time for these': 'sparkles-outline',
   'Schedule study time': 'sparkles-outline',
@@ -97,6 +101,23 @@ function TypingDots() {
 
 function ClingAvatar({ size }: { size: number }) {
   return <ClingFace size={size} animated />;
+}
+
+function ClassRow({ item }: { item: ClassSummary }) {
+  return (
+    <View style={styles.taskCard}>
+      <View style={[styles.taskBar, { backgroundColor: C.secondary }]} />
+      <View style={styles.taskBody}>
+        <Text style={styles.taskTitle} numberOfLines={2}>
+          {item.subject}
+        </Text>
+        <Text style={styles.taskMeta}>
+          {item.time}
+          {item.room ? `  ·  ${item.room}` : ''}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 function TaskRow({ task }: { task: TaskSummary }) {
@@ -206,6 +227,13 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
                   <View style={styles.taskList}>
                     {turn.extra.assignmentSummary.map((task) => (
                       <TaskRow key={task.title} task={task} />
+                    ))}
+                  </View>
+                )}
+                {turn.extra?.classSummary && (
+                  <View style={styles.taskList}>
+                    {turn.extra.classSummary.map((item) => (
+                      <ClassRow key={`${item.subject}-${item.time}`} item={item} />
                     ))}
                   </View>
                 )}

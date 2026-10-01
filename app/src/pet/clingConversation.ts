@@ -4,7 +4,8 @@
 // interaction example (idle -> tap -> "Hey! What can I help with?" with
 // canned options).
 
-import { getUpcomingAssignments } from '../db/queries';
+import { formatMinutes } from '../classes/time';
+import { getAllClassMeetings, getUpcomingAssignments } from '../db/queries';
 import {
   buildProposedSchedule,
   commitProposedSchedule,
@@ -34,7 +35,24 @@ export const CONVERSATION: Record<string, ConversationNode> = {
       { label: 'Show my tasks', next: 'show_tasks' },
       { label: 'I need to study', next: 'offer_schedule' },
       { label: "What's next?", next: 'whats_next' },
+      { label: 'My classes', next: 'classes_today' },
       { label: "I'm busy at a certain time", next: 'busy_intro' },
+    ],
+  },
+  classes_today: {
+    id: 'classes_today',
+    clingSays: "Here are your classes today.", // class list rendered separately, see ClingPanel
+    options: [
+      { label: "Tomorrow's classes", next: 'classes_tomorrow' },
+      { label: 'Back', next: 'root' },
+    ],
+  },
+  classes_tomorrow: {
+    id: 'classes_tomorrow',
+    clingSays: "Here are your classes tomorrow.",
+    options: [
+      { label: "Today's classes", next: 'classes_today' },
+      { label: 'Back', next: 'root' },
     ],
   },
   busy_intro: {
@@ -91,8 +109,11 @@ export const CONVERSATION: Record<string, ConversationNode> = {
 
 export type TaskSummary = { title: string; dueAt: string | null; urgency: number; minutes: number };
 
+export type ClassSummary = { subject: string; time: string; room: string | null };
+
 export type ConversationSideEffectResult = {
   assignmentSummary?: TaskSummary[];
+  classSummary?: ClassSummary[];
   proposedBlocks?: ProposedBlock[];
   /** Replaces the node's static line when what happened differs from the happy path. */
   clingSaysOverride?: string;
@@ -114,6 +135,25 @@ export async function resolveNodeEffects(nodeId: string): Promise<ConversationSi
         dueAt: a.due_at,
         urgency: a.urgency_score,
         minutes: a.suggested_minutes,
+      })),
+    };
+  }
+
+  if (nodeId === 'classes_today' || nodeId === 'classes_tomorrow') {
+    const day = new Date();
+    if (nodeId === 'classes_tomorrow') day.setDate(day.getDate() + 1);
+    const classes = (await getAllClassMeetings())
+      .filter((c) => c.day_of_week === day.getDay())
+      .sort((a, b) => a.start_minutes - b.start_minutes);
+    if (classes.length === 0) {
+      const when = nodeId === 'classes_today' ? 'today' : 'tomorrow';
+      return { clingSaysOverride: `No classes ${when}. Free day!` };
+    }
+    return {
+      classSummary: classes.map((c) => ({
+        subject: c.subject,
+        time: `${formatMinutes(c.start_minutes)} – ${formatMinutes(c.end_minutes)}`,
+        room: c.room,
       })),
     };
   }
