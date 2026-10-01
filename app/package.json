@@ -10,7 +10,8 @@
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-fast-tflite": "^3.0.1"
+    "react-native-fast-tflite": "^3.0.1",
+    "expo-sqlite": "~57.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
