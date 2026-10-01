@@ -4,6 +4,7 @@
 
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { enableOverlay, isOverlayRunning, isOverlaySupported, stopOverlay } from '../pet/overlayBridge';
 import { C } from '../screens/utils/theme';
 
 const MASCOT_HEADER =
@@ -16,11 +17,20 @@ export function AppHeader({
   subtitle: string;
   onSignOut?: () => void;
 }) {
-  const handleProfilePress = () => {
-    if (!onSignOut) return;
-    Alert.alert('Sign out', 'Sign out of Clingy?', [
+  const handleProfilePress = async () => {
+    // Android caps alerts at three buttons: Cancel, the floating-Cling toggle, Sign out.
+    const overlayOn = isOverlaySupported ? await isOverlayRunning() : false;
+    Alert.alert('Cling', undefined, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: onSignOut },
+      ...(isOverlaySupported
+        ? [
+            {
+              text: overlayOn ? 'Turn off floating Cling' : 'Turn on floating Cling',
+              onPress: () => (overlayOn ? stopOverlay() : void enableOverlay()),
+            },
+          ]
+        : []),
+      ...(onSignOut ? [{ text: 'Sign out', style: 'destructive' as const, onPress: onSignOut }] : []),
     ]);
   };
 
@@ -44,7 +54,7 @@ export function AppHeader({
             style={styles.profileCircle}
             onPress={handleProfilePress}
             hitSlop={8}
-            accessibilityLabel="Sign out"
+            accessibilityLabel="Settings"
           >
             <Text style={styles.profileIcon}>👤</Text>
           </Pressable>

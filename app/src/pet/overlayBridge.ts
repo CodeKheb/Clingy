@@ -9,6 +9,7 @@ type ClingOverlayNative = {
   requestPermission(): void;
   startOverlay(): Promise<boolean>;
   stopOverlay(): void;
+  isOverlayRunning(): Promise<boolean>;
   setMood(mood: string): void;
   setAppForeground(foreground: boolean): void;
 };
@@ -45,4 +46,22 @@ export function setOverlayMood(mood: string): void {
 /** Hides the system-wide bubble while the app is foregrounded (PetFloatingFallback covers that case in-app). No-op if the overlay isn't running. */
 export function setOverlayAppForeground(foreground: boolean): void {
   native?.setAppForeground(foreground);
+}
+
+/** Whether the bubble service is alive right now (it can end by being dragged onto the dismiss X). */
+export async function isOverlayRunning(): Promise<boolean> {
+  if (!native) return false;
+  return native.isOverlayRunning();
+}
+
+/**
+ * Turns the floating bubble on. Without the "display over other apps" permission this opens
+ * the system Settings page instead (the user flips the toggle and tries again) and resolves false.
+ */
+export async function enableOverlay(): Promise<boolean> {
+  if (!(await canDrawOverlays())) {
+    requestOverlayPermission();
+    return false;
+  }
+  return startOverlay();
 }

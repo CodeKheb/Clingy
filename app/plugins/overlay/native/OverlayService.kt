@@ -6,7 +6,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -18,6 +20,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
+import android.widget.TextView
 import com.clingy.R
 
 // Draws a draggable, animated bubble over other apps using WindowManager, and
@@ -31,6 +34,7 @@ import com.clingy.R
 class OverlayService : Service() {
   private lateinit var windowManager: WindowManager
   private var bubbleView: ImageView? = null
+  private var dismissTarget: TextView? = null
   private val mainHandler = Handler(Looper.getMainLooper())
 
   private var currentAnimation = ANIM_IDLE
@@ -56,6 +60,11 @@ class OverlayService : Service() {
 
     @Volatile
     var isRunning = false
+
+    // Latest mood pushed from JS, kept even while the service isn't running so a freshly
+    // started bubble opens in the right animation (e.g. the "!" reminder) instead of idle.
+    @Volatile
+    var lastMood: String? = null
 
     const val ANIM_IDLE = "idle"
     const val ANIM_DRAG = "drag"
@@ -128,6 +137,8 @@ class OverlayService : Service() {
     snapAnimator?.cancel()
     bubbleView?.let { windowManager.removeView(it) }
     bubbleView = null
+    dismissTarget?.let { windowManager.removeView(it) }
+    dismissTarget = null
   }
 
   private fun buildNotification(): Notification {
@@ -157,10 +168,16 @@ class OverlayService : Service() {
   }
 
   private fun addBubble() {
-    val sizePx = (84 * resources.displayMetrics.density).toInt()
+    // Same size and edge hang as the in-app Cling (PetFloatingFallback: 140x150 sprite at 0.6 scale,
+    // sitting 32% of its width past the screen edge so only its hand pokes in).
+    val density = resources.displayMetrics.density
+    val widthPx = (84 * density).toInt()
+    val heightPx = (90 * density).toInt()
+    val hangPx = (widthPx * 0.32f).toInt()
     val imageView = ImageView(this).apply {
       setImageResource(R.drawable.idle_1)
-      layoutParams = android.view.ViewGroup.LayoutParams(sizePx, sizePx)
+      scaleType = ImageView.ScaleType.FIT_XY
+      layoutParams = android.view.ViewGroup.LayoutParams(widthPx, heightPx)
     }
 
     val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -174,17 +191,33 @@ class OverlayService : Service() {
     val screenHeight = resources.displayMetrics.heightPixels
 
     val params = WindowManager.LayoutParams(
-      sizePx,
-      sizePx,
+      widthPx,
+      heightPx,
       overlayType,
-      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+      // NO_LIMITS lets the window sit partly past the screen edge.
+      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
       PixelFormat.TRANSLUCENT
     ).apply {
       gravity = Gravity.TOP or Gravity.START
-      x = screenWidth - sizePx
+      x = screenWidth - widthPx + hangPx
       y = (screenHeight * 0.4).toInt()
     }
 
+    val target = createDismissTarget(overlayType)
+    dismissTarget = target
+
+    // Is the finger over the dismiss circle? Uses the circle's real on-screen position.
+    fun overDismissTarget(rawX: Float, rawY: Float): Boolean {
+      val loc = IntArray(2)
+      target.getLocationOnScreen(loc)
+      val cx = loc[0] + target.width / 2f
+      val cy = loc[1] + target.height / 2f
+      val dx = rawX - cx
+      val dy = rawY - cy
+      return kotlin.math.sqrt(dx * dx + dy * dy) < target.width * 1.1f
+    }
+
+    var overTarget = false
     var initialX = 0
     var initialY = 0
     var initialTouchX = 0f
@@ -208,20 +241,38 @@ class OverlayService : Service() {
           if (!isDragging && (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8)) {
             isDragging = true
             setAnimation(ANIM_DRAG)
+            showDismissTarget(target)
           }
           if (isDragging) {
-            params.x = (initialX + dx).coerceIn(0, screenWidth - sizePx)
-            params.y = (initialY + dy).coerceIn(0, screenHeight - sizePx)
+            params.x = (initialX + dx).coerceIn(-hangPx, screenWidth - widthPx + hangPx)
+            params.y = (initialY + dy).coerceIn(0, screenHeight - heightPx)
             windowManager.updateViewLayout(view, params)
+            val hot = overDismissTarget(event.rawX, event.rawY)
+            if (hot != overTarget) {
+              overTarget = hot
+              target.animate().scaleX(if (hot) 1.3f else 1f).scaleY(if (hot) 1.3f else 1f).setDuration(120).start()
+              (target.background as? GradientDrawable)?.setColor(
+                if (hot) Color.parseColor("#FFFF6B35") else Color.parseColor("#CC1C2029")
+              )
+            }
           }
           true
         }
+        MotionEvent.ACTION_CANCEL -> {
+          hideDismissTarget(target)
+          overTarget = false
+          false
+        }
         MotionEvent.ACTION_UP -> {
+          hideDismissTarget(target)
           if (!isDragging) {
             openPanel()
+          } else if (overTarget) {
+            // Dropped on the X: shrink away and stop the overlay entirely.
+            view.animate().scaleX(0f).scaleY(0f).alpha(0f).setDuration(160).withEndAction { stopSelf() }.start()
           } else {
-            dockedRight = params.x + sizePx / 2 > screenWidth / 2
-            val targetX = if (dockedRight) screenWidth - sizePx else 0
+            dockedRight = params.x + widthPx / 2 > screenWidth / 2
+            val targetX = if (dockedRight) screenWidth - widthPx + hangPx else -hangPx
             snapToEdge(params, targetX)
           }
           true
@@ -232,7 +283,49 @@ class OverlayService : Service() {
 
     bubbleView = imageView
     windowManager.addView(imageView, params)
-    setAnimation(ANIM_IDLE)
+    setAnimation(animationForMood(lastMood))
+  }
+
+  // Circle with an X, centred near the bottom of the screen; shown only while dragging.
+  private fun createDismissTarget(overlayType: Int): TextView {
+    val density = resources.displayMetrics.density
+    val sizePx = (68 * density).toInt()
+    val view = TextView(this).apply {
+      text = "\u2715"
+      textSize = 24f
+      setTextColor(Color.WHITE)
+      gravity = Gravity.CENTER
+      background = GradientDrawable().apply {
+        shape = GradientDrawable.OVAL
+        setColor(Color.parseColor("#CC1C2029"))
+        setStroke((2 * density).toInt(), Color.parseColor("#FFFF6B35"))
+      }
+      visibility = View.GONE
+    }
+    val params = WindowManager.LayoutParams(
+      sizePx,
+      sizePx,
+      overlayType,
+      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+      PixelFormat.TRANSLUCENT
+    ).apply {
+      gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+      y = (88 * density).toInt() // clear of the gesture/nav bar
+    }
+    windowManager.addView(view, params)
+    return view
+  }
+
+  private fun showDismissTarget(target: View) {
+    target.scaleX = 0.8f
+    target.scaleY = 0.8f
+    target.alpha = 0f
+    target.visibility = View.VISIBLE
+    target.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160).start()
+  }
+
+  private fun hideDismissTarget(target: View) {
+    target.animate().alpha(0f).setDuration(120).withEndAction { target.visibility = View.GONE }.start()
   }
 
   // Ported from PetFloatingFallback.tsx's onPanResponderRelease: decide dock
@@ -250,7 +343,7 @@ class OverlayService : Service() {
       addListener(object : android.animation.AnimatorListenerAdapter() {
         override fun onAnimationEnd(animation: android.animation.Animator) {
           bubbleView?.scaleX = if (dockedRight) 1f else -1f
-          setAnimation(ANIM_IDLE)
+          setAnimation(animationForMood(lastMood))
         }
       })
       start()

@@ -49,13 +49,23 @@ class OverlayModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
       promise.resolve(false)
       return
     }
-    val intent = Intent(reactApplicationContext, OverlayService::class.java)
+    // Started from inside the app, so the bubble stays hidden until the app is backgrounded
+    // (the in-app Cling is already on screen).
+    val intent = Intent(reactApplicationContext, OverlayService::class.java).apply {
+      putExtra(OverlayService.EXTRA_APP_FOREGROUND, true)
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       reactApplicationContext.startForegroundService(intent)
     } else {
       reactApplicationContext.startService(intent)
     }
     promise.resolve(true)
+  }
+
+  // The overlay can end without JS knowing (dragged onto the dismiss X), so ask rather than remember.
+  @ReactMethod
+  fun isOverlayRunning(promise: Promise) {
+    promise.resolve(OverlayService.isRunning)
   }
 
   @ReactMethod
@@ -70,6 +80,7 @@ class OverlayModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
   // the moment mood changes, even if the user never enabled it.
   @ReactMethod
   fun setMood(mood: String) {
+    OverlayService.lastMood = mood
     if (!OverlayService.isRunning) return
     val intent = Intent(reactApplicationContext, OverlayService::class.java).apply {
       putExtra(OverlayService.EXTRA_MOOD, mood)
