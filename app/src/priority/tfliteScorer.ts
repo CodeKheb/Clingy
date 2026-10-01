@@ -14,7 +14,7 @@
 // so initPriorityScorer() probes both orderings empirically and keeps the one
 // with better similarity separation.
 
-import modelAsset from '../../assets/models/all-MiniLM-L6-v2-quant.tflite';
+import { NativeModules } from 'react-native';
 import { loadTensorflowModel } from 'react-native-fast-tflite';
 import type { TfliteModel, Tensor } from 'react-native-fast-tflite';
 
@@ -48,6 +48,15 @@ const TYPE_ANCHORS: { type: TaskType; text: string }[] = [
 const TYPE_MATCH_THRESHOLD = 0.3;
 
 
+const MODEL_FILE = 'all-MiniLM-L6-v2-quant.tflite';
+
+/** file:// path of the model copied out of the app's native assets (see plugins/overlay/native/ModelAssetModule.kt). */
+async function bundledModelUrl(): Promise<string> {
+  const native = NativeModules.ClingModelAsset as { prepare(name: string): Promise<string> } | undefined;
+  if (!native) throw new Error('ClingModelAsset native module is missing (Android only)');
+  return native.prepare(MODEL_FILE);
+}
+
 // --- Init state --------------------------------------------------------------
 
 type ScorerState = {
@@ -75,7 +84,7 @@ export function initPriorityScorer(): Promise<boolean> {
   initPromise ??= (async () => {
     try {
       // Empty delegate list = stock CPU delegate (most predictable for this model).
-      const model = await loadTensorflowModel(modelAsset, []);
+      const model = await loadTensorflowModel({ url: await bundledModelUrl() }, []);
 
       const idsIndex = model.inputs.findIndex((t) => t.name === 'inputs_1');
       const maskIndex = model.inputs.findIndex((t) => t.name === 'inputs');

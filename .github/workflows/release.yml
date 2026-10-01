@@ -1,0 +1,56 @@
+# Pushing a version tag (git tag v1.0.0 && git push origin v1.0.0) builds the Android APK here and
+# publishes it as a GitHub Release. The download page's /api/releases picks it up from there.
+
+name: Release APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # lets the job create the release
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # app/.env.local isn't in the repo, so the deployed backend address is set here.
+      EXPO_PUBLIC_BACKEND_URL: https://api.getclingy.download
+      NODE_ENV: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install JavaScript dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Generate the Android project
+        working-directory: app
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build the release APK (64-bit ARM)
+        working-directory: app/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp app/android/app/build/outputs/apk/release/app-release.apk "Clingy-${GITHUB_REF_NAME}.apk"
+          gh release create "$GITHUB_REF_NAME" "Clingy-${GITHUB_REF_NAME}.apk" \
+            --title "Clingy ${GITHUB_REF_NAME#v}" \
+            --notes "Download the APK on a 64-bit Android phone and open it to install." \
+            --generate-notes

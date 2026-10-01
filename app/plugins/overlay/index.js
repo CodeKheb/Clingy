@@ -15,7 +15,10 @@ const fs = require('fs');
 const path = require('path');
 
 const PACKAGE_DIR = 'com/clingy/overlay';
-const NATIVE_FILES = ['OverlayService.kt', 'OverlayModule.kt', 'OverlayPackage.kt'];
+const NATIVE_FILES = ['OverlayService.kt', 'OverlayModule.kt', 'OverlayPackage.kt', 'ModelAssetModule.kt'];
+
+// The on-device model ships as a native Android asset (see ModelAssetModule.kt) rather than through Metro.
+const MODEL_FILES = ['all-MiniLM-L6-v2-quant.tflite'];
 
 function withOverlayNativeFiles(config) {
   return withDangerousMod(config, [
@@ -52,6 +55,12 @@ function withOverlayNativeFiles(config) {
       for (const file of fs.readdirSync(clingFramesDir)) {
         if (!file.endsWith('.png')) continue;
         fs.copyFileSync(path.join(clingFramesDir, file), path.join(drawableDestDir, file));
+      }
+
+      const modelsDir = path.join(config.modRequest.platformProjectRoot, 'app/src/main/assets/models');
+      fs.mkdirSync(modelsDir, { recursive: true });
+      for (const file of MODEL_FILES) {
+        fs.copyFileSync(path.join(__dirname, '../../assets/models', file), path.join(modelsDir, file));
       }
 
       return config;
