@@ -3,8 +3,8 @@
 Live checklist. Check items off as you go so everyone can see progress without a separate PM tool.
 
 ## Hour 1 — Setup
-- [ ] Agree on `CONTRACT.md` contents (all three)
-- [ ] Person A: Google Cloud Console project + OAuth consent screen + scopes
+- [x] Agree on `CONTRACT.md` contents (all three)
+- [x] Person A: Google Cloud Console project + OAuth consent screen + scopes
 - [ ] Person A: publish mock JSON fixture matching `CONTRACT.md` response shapes
 - [ ] Person B: SQLite schema created, migrations run
 - [ ] Person C: heuristic priority scorer working against `CONTRACT.md` interface
