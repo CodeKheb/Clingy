@@ -27,10 +27,10 @@ Live checklist. Check items off as you go so everyone can see progress without a
 - [ ] (C) TFLite classifier integrated behind `scorePriority()`, feature-flagged
 - [ ] (C) fallback verified: flag off → heuristic still works
 
-## P1 — Pet widget
-- [ ] (C) in-app floating pet fallback (build this first)
+## P1 — Cling (mascot widget)
+- [ ] (C) in-app floating Cling fallback (build this first)
 - [ ] (C) native overlay bubble (timeboxed, 2-3 hrs max)
-- [ ] (C) PetScreen with mood states/animations
+- [ ] (C) PetScreen with Cling's mood states/animations
 - [ ] (B/C) mood aggregation wired to real urgency scores
 
 ## P2 — Stretch

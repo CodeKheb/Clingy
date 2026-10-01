@@ -94,11 +94,11 @@ export function scorePriority(input: PriorityInput): PriorityOutput;
 
 Person B calls `scorePriority()` for each assignment after sync and writes the result into `assignments.urgency_score` / `assignments.suggested_minutes`. Person C can swap the heuristic implementation for a TFLite-backed one behind this same function signature with zero changes needed on Person B's side.
 
-## 4. Pet widget contract (owned by Person C)
+## 4. Cling (mascot widget) contract (owned by Person C)
 
-- Exposes a `PetWidget` component (overlay or in-app fallback, same props either way):
+- Exposes a `ClingWidget` component (overlay or in-app fallback, same props either way):
   ```ts
-  type PetWidgetProps = {
+  type ClingWidgetProps = {
     mood: 'happy' | 'neutral' | 'stressed' | 'urgent';
     onPress: () => void; // navigates into the app
   };

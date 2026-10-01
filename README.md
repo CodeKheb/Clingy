@@ -1,6 +1,6 @@
-# StudyPet
+# Clingy
 
-A privacy-first Android app that syncs Google Classroom assignments and Google Calendar events, works fully offline once synced, and uses an on-device prioritization model plus a floating "pet" widget to remind you of deadlines and suggest how to spend your time.
+A privacy-first Android app that syncs Google Classroom assignments and Google Calendar events, works fully offline once synced, and uses an on-device prioritization model plus **Cling** — a floating pet mascot — to remind you of deadlines and suggest how to spend your time.
 
 ## Stack
 
@@ -57,4 +57,4 @@ npx expo run:android
 2. Sync Classroom + Calendar data.
 3. Turn off network — show deadline list still renders, sorted by urgency, with suggested time blocks.
 4. Show a deadline reminder notification firing.
-5. Tap the pet widget — app opens to the relevant screen.
+5. Tap Cling — app opens to the relevant screen.
