@@ -36,6 +36,7 @@ async function pushBlocks(): Promise<void> {
     }),
   });
   if (!response.ok) console.warn(`[calendar] could not update Google Calendar (${response.status})`);
+  else console.log('[calendar] study blocks synced', JSON.stringify(await response.json().catch(() => null)));
 }
 
 const CLASS_PUSH_DAYS = 28;
@@ -61,6 +62,7 @@ async function pushClasses(): Promise<void> {
     }),
   });
   if (!response.ok) console.warn(`[calendar] could not update classes on Google Calendar (${response.status})`);
+  else console.log('[calendar] classes synced', JSON.stringify(await response.json().catch(() => null)));
 }
 
 async function run(): Promise<void> {

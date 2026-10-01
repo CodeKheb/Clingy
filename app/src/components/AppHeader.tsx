@@ -3,7 +3,7 @@
 // header stays identical across the app.
 
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { C } from '../screens/utils/theme';
@@ -13,9 +13,12 @@ import { SettingsSheet } from './SettingsSheet';
 
 export function AppHeader({
   subtitle,
+  syncing = false,
   onSignOut,
 }: {
   subtitle: string;
+  /** Shows a small spinner beside the subtitle while a sync runs. */
+  syncing?: boolean;
   onSignOut?: () => void;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -33,7 +36,10 @@ export function AppHeader({
           />
           <View>
             <Text style={styles.headerTitle}>Cling</Text>
-            <Text style={styles.headerSubtitle}>{subtitle}</Text>
+            <View style={styles.subtitleRow}>
+              {syncing ? <ActivityIndicator size={16} color={C.primary} accessibilityLabel="Syncing" /> : null}
+              <Text style={styles.headerSubtitle}>{subtitle}</Text>
+            </View>
           </View>
         </View>
 
@@ -84,6 +90,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.onSurface,
     letterSpacing: -0.3,
+  },
+  subtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   headerSubtitle: {
     fontSize: 11,

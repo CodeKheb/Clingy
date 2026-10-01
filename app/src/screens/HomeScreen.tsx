@@ -327,13 +327,13 @@ export function HomeScreen({ onSelectTab, onSignOut, refreshing = false, onRefre
 
   return (
     <View style={styles.root}>
-      <AppHeader subtitle={syncStatus ? describeSync(syncStatus) : 'Home'} onSignOut={onSignOut} />
+      <AppHeader subtitle={syncStatus ? describeSync(syncStatus) : 'Home'} syncing={refreshing} onSignOut={onSignOut} />
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
+        refreshControl={onRefresh ? <RefreshControl refreshing={false} onRefresh={onRefresh} /> : undefined}
       >
         <GreetingCard
           greeting={summary.greeting}
