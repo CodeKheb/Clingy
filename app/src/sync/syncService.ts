@@ -172,7 +172,7 @@ export async function syncNow(): Promise<SyncResult> {
     if ((await getAllScheduleBlocks()).length > 0) {
       await commitProposedSchedule(await buildProposedSchedule());
     } else {
-      await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
+      void rescheduleReminders();
     }
 
     return { ok: true, assignmentCount: scored.length, eventCount: events.length };

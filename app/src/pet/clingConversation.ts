@@ -122,7 +122,7 @@ export async function resolveNodeEffects(nodeId: string): Promise<ConversationSi
     const range = await pickBusyRange();
     if (!range) return { clingSaysOverride: 'No problem, I left your schedule as it was.' };
     if (range.end <= range.start) {
-      return { clingSaysOverride: 'That end time is before the start, so I left your schedule as it was.' };
+      return { clingSaysOverride: 'That ends before it starts, so I left your schedule as it was.' };
     }
     await markUnavailableAndReschedule(range.start.toISOString(), range.end.toISOString());
     return {};

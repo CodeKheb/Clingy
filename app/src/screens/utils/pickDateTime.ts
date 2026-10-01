@@ -1,39 +1,81 @@
-// Android system date/time dialogs as promises. Resolves null if dismissed.
+// Android system date/time dialogs as promises. Resolves null if dismissed or if the dialog fails to open.
 
+import { ToastAndroid } from 'react-native';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 
-function pick(mode: 'date' | 'time', value: Date, title: string, minimumDate?: Date): Promise<Date | null> {
+const CHOOSE_TIMES = Symbol('choose-times');
+
+// The default Android dialogs ignore a title, so say which step this is with a short toast instead.
+function pick(
+  mode: 'date' | 'time',
+  value: Date,
+  hint: string,
+  options: { minimumDate?: Date; timesButton?: boolean } = {},
+): Promise<Date | typeof CHOOSE_TIMES | null> {
+  ToastAndroid.show(hint, ToastAndroid.SHORT);
   return new Promise((resolve) => {
     DateTimePickerAndroid.open({
       mode,
       value,
-      title,
-      minimumDate,
+      minimumDate: options.minimumDate,
       is24Hour: false,
+      ...(options.timesButton
+        ? {
+            // Confirm = block whole days (keeps the chosen until-day); the side button switches to exact times.
+            positiveButton: { label: 'All day' },
+            neutralButton: { label: 'Choose times' },
+            onNeutralButtonPress: () => resolve(CHOOSE_TIMES),
+          }
+        : {}),
       onValueChange: (_event, date) => resolve(date),
       onDismiss: () => resolve(null),
+      // Without this the library swallows the failure and the caller would wait forever.
+      onError: (error) => {
+        console.warn('[picker] could not open the dialog:', error);
+        ToastAndroid.show("Couldn't open the date picker", ToastAndroid.LONG);
+        resolve(null);
+      },
     });
   });
 }
 
-/** Walks through day, start time and end time; null if the user backs out of any step. */
+function atTime(day: Date, hours: number, minutes: number, seconds = 0): Date {
+  const result = new Date(day);
+  result.setHours(hours, minutes, seconds, 0);
+  return result;
+}
+
+/**
+ * Busy from one day to another (all day), or on one day from a start time to an end time. Null if the user backs out of any step.
+ */
 export async function pickBusyRange(): Promise<{ start: Date; end: Date } | null> {
   const now = new Date();
-  const day = await pick('date', now, 'Which day are you busy?', now);
-  if (!day) return null;
+  const fromDay = await pick('date', now, 'Busy from which day?', { minimumDate: now });
+  if (!(fromDay instanceof Date)) return null;
 
-  const startDefault = new Date(day);
-  startDefault.setHours(Math.max(9, day.toDateString() === now.toDateString() ? now.getHours() + 1 : 9), 0, 0, 0);
-  const startTime = await pick('time', startDefault, 'Busy from');
-  if (!startTime) return null;
+  const untilDay = await pick('date', fromDay, 'Busy until which day? (same day for just one)', {
+    minimumDate: fromDay,
+    timesButton: true,
+  });
+  if (untilDay === null) return null;
+  if (untilDay instanceof Date) return { start: atTime(fromDay, 0, 0), end: atTime(untilDay, 23, 59, 59) };
 
-  const endDefault = new Date(startTime.getTime() + 60 * 60 * 1000);
-  const endTime = await pick('time', endDefault, 'Busy until');
-  if (!endTime) return null;
+  // "Choose times": a single day, from one time to another.
+  const startPicked = await pick('time', atTime(fromDay, 9, 0), 'Busy from what time?');
+  if (!(startPicked instanceof Date)) return null;
+  const endPicked = await pick('time', atTime(fromDay, 17, 0), 'Busy until what time?');
+  if (!(endPicked instanceof Date)) return null;
+  return {
+    start: atTime(fromDay, startPicked.getHours(), startPicked.getMinutes()),
+    end: atTime(fromDay, endPicked.getHours(), endPicked.getMinutes()),
+  };
+}
 
-  const start = new Date(day);
-  start.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
-  const end = new Date(day);
-  end.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
-  return { start, end };
+/** A single moment: day, then time of day. Null if the user backs out. */
+export async function pickMoment(initial: Date): Promise<Date | null> {
+  const day = await pick('date', initial, 'Move to which day?', { minimumDate: new Date() });
+  if (!(day instanceof Date)) return null;
+  const time = await pick('time', initial, 'Move to what time?');
+  if (!(time instanceof Date)) return null;
+  return atTime(day, time.getHours(), time.getMinutes());
 }

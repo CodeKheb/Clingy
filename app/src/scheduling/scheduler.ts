@@ -46,6 +46,57 @@ export async function markUnavailableAndReschedule(startAt: string, endAt: strin
   await commitProposedSchedule(await buildProposedSchedule());
 }
 
+// --- Pinned blocks: times the student chose themselves ----------------------------
+
+const PINS_KEY = 'pinned_blocks';
+
+export type Pin = { assignmentId: string; start: number; end: number };
+
+type BlockRef = { assignment_id: string; start_at: string; end_at: string };
+
+export const pinKey = (assignmentId: string, start: number | string) =>
+  `${assignmentId}|${typeof start === 'number' ? start : new Date(start).getTime()}`;
+
+async function loadPins(now: number): Promise<Pin[]> {
+  try {
+    const parsed = JSON.parse((await getMeta(PINS_KEY)) ?? '[]') as Pin[];
+    return parsed.filter((p) => p.end > now);
+  } catch {
+    return [];
+  }
+}
+
+/** Keys (see pinKey) of the blocks the student has pinned, for showing a pin on them. */
+export async function getPinnedKeys(): Promise<Set<string>> {
+  return new Set((await loadPins(Date.now())).map((p) => pinKey(p.assignmentId, p.start)));
+}
+
+/**
+ * Moves one block to a new start time (keeping its length), pins it there, and rebuilds the rest of
+ * the schedule around it. Pinned blocks are never moved by later rebuilds, and they count toward
+ * their assignment's study time, so no extra session is added to make up for them.
+ */
+export async function moveBlock(block: BlockRef, newStartMs: number): Promise<void> {
+  const oldStart = new Date(block.start_at).getTime();
+  const durationMs = new Date(block.end_at).getTime() - oldStart;
+  const pins = (await loadPins(Date.now())).filter(
+    (p) => !(p.assignmentId === block.assignment_id && p.start === oldStart),
+  );
+  pins.push({ assignmentId: block.assignment_id, start: newStartMs, end: newStartMs + durationMs });
+  await setMeta(PINS_KEY, JSON.stringify(pins));
+  await commitProposedSchedule(await buildProposedSchedule());
+}
+
+/** Hands a pinned block back to the scheduler. */
+export async function unpinBlock(block: BlockRef): Promise<void> {
+  const start = new Date(block.start_at).getTime();
+  const pins = (await loadPins(Date.now())).filter(
+    (p) => !(p.assignmentId === block.assignment_id && p.start === start),
+  );
+  await setMeta(PINS_KEY, JSON.stringify(pins));
+  await commitProposedSchedule(await buildProposedSchedule());
+}
+
 export type ProposedBlock = {
   assignmentId: string;
   assignmentTitle: string;
@@ -128,6 +179,7 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
   ];
 
   const blocks: ProposedBlock[] = [];
+  const pins = await loadPins(now);
 
   // Time already claimed per day (earlier assignments' sessions plus gaps),
   // and minutes of study per day, shared across all assignments.
@@ -150,9 +202,31 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
     return subtractBusy(window, busy).find((slot) => slot.end - slot.start >= need) ?? null;
   }
 
+  // Pinned blocks go in first, exactly where the student put them, so everything else plans around them.
+  const assignmentById = new Map(sorted.map((a) => [a.id, a]));
+  const pinnedMinutes = new Map<string, number>();
+  for (const pin of pins) {
+    const assignment = assignmentById.get(pin.assignmentId);
+    if (!assignment) continue; // its assignment is gone (handed in, dismissed, past due)
+    const minutes = (pin.end - pin.start) / 60000;
+    blocks.push({
+      assignmentId: assignment.id,
+      assignmentTitle: assignment.title,
+      startAt: new Date(pin.start).toISOString(),
+      endAt: new Date(pin.end).toISOString(),
+    });
+    pinnedMinutes.set(assignment.id, (pinnedMinutes.get(assignment.id) ?? 0) + minutes);
+    const d = dayStarts.findIndex((dayStart, i) => pin.start >= dayStart && pin.start < (dayStarts[i + 1] ?? dayStart + DAY_MS));
+    if (d >= 0) {
+      claimedByDay.set(d, [...(claimedByDay.get(d) ?? []), { start: pin.start, end: pin.end + SESSION_GAP_MINUTES * 60000 }]);
+      loadByDay.set(d, (loadByDay.get(d) ?? 0) + minutes);
+    }
+  }
+
   for (const assignment of sorted) {
-    if (assignment.suggested_minutes <= 0) continue;
-    const sessions = planSessions(assignment.suggested_minutes);
+    const remainingMinutes = assignment.suggested_minutes - (pinnedMinutes.get(assignment.id) ?? 0);
+    if (remainingMinutes < MIN_SLOT_MINUTES) continue;
+    const sessions = planSessions(remainingMinutes);
 
     const dueMs = assignment.due_at ? new Date(assignment.due_at).getTime() : now + LOOKAHEAD_DAYS * DAY_MS;
     // Aim to finish a day early when there's room for that; otherwise an hour before it's due.
@@ -211,7 +285,7 @@ export async function commitProposedSchedule(blocks: ProposedBlock[]): Promise<v
       end_at: b.endAt,
     })),
   );
-  await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
+  void rescheduleReminders(); // background: scheduling dozens of notifications shouldn't hold up the UI
 }
 
 export type { Assignment };

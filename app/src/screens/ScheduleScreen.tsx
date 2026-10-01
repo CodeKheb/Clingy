@@ -4,6 +4,7 @@
 // for title + urgency. Layout follows DESIGN.md and reuses the shared design
 // system (src/theme.ts + src/components/) so it matches HomeScreen exactly.
 
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -22,9 +23,20 @@ import {
   getUpcomingEvents,
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
-import { buildProposedSchedule, commitProposedSchedule, markUnavailableAndReschedule } from '../scheduling/scheduler';
+import {
+  buildProposedSchedule,
+  commitProposedSchedule,
+  getPinnedKeys,
+  markUnavailableAndReschedule,
+  moveBlock,
+  pinKey,
+  unpinBlock,
+} from '../scheduling/scheduler';
 import { sessionLabels, type TaskType } from '../priority/taskProfile';
-import { pickBusyRange } from './utils/pickDateTime';
+import { ArrangeModal } from './ArrangeModal';
+import { RescheduleOverlay } from '../components/RescheduleOverlay';
+import { BlockActionSheet } from './BlockActionSheet';
+import { pickMoment } from './utils/pickDateTime';
 import { C, urgencyColor, urgencyLabel } from './utils/theme';
 import {
   dayLabel,
@@ -57,7 +69,6 @@ function PlanSummaryCard({
   plannedMinutes,
   nextLabel,
   onRerun,
-  onBusy,
   rerunning,
   rerunError,
 }: {
@@ -65,7 +76,6 @@ function PlanSummaryCard({
   plannedMinutes: number;
   nextLabel: string | null;
   onRerun: () => void;
-  onBusy: () => void;
   rerunning: boolean;
   rerunError: string | null;
 }) {
@@ -126,9 +136,6 @@ function PlanSummaryCard({
           {rerunning ? 'Scheduling…' : 'Re-run Scheduler'}
         </Text>
       </Pressable>
-      <Pressable style={styles.busyButton} onPress={onBusy} disabled={rerunning}>
-        <Text style={styles.busyButtonText}>I&apos;m busy at a certain time…</Text>
-      </Pressable>
       {rerunError && <Text style={styles.summaryError}>{rerunError}</Text>}
     </View>
   );
@@ -138,12 +145,14 @@ function BlockCard({
   block,
   assignment,
   sessionLabel,
-  onCantMakeIt,
+  pinned,
+  onMenu,
 }: {
   block: ScheduleBlock;
   assignment?: Assignment;
   sessionLabel?: string;
-  onCantMakeIt?: (block: ScheduleBlock) => void;
+  pinned?: boolean;
+  onMenu?: (block: ScheduleBlock) => void;
 }) {
   const accent = assignment
     ? urgencyColor(assignment.urgency_score)
@@ -164,7 +173,12 @@ function BlockCard({
 
       {/* Content */}
       <View style={styles.blockBody}>
-        {sessionLabel ? <Text style={styles.blockSession}>{sessionLabel}</Text> : null}
+        {sessionLabel || pinned ? (
+          <View style={styles.blockSessionRow}>
+            {sessionLabel ? <Text style={styles.blockSession}>{sessionLabel}</Text> : null}
+            {pinned ? <Ionicons name="pin" size={12} color={C.primary} /> : null}
+          </View>
+        ) : null}
         <Text style={styles.blockTitle} numberOfLines={2}>
           {assignment?.title ?? 'Study block'}
         </Text>
@@ -181,12 +195,18 @@ function BlockCard({
             </Text>
           ) : null}
         </View>
-        {onCantMakeIt ? (
-          <Pressable style={styles.moveButton} onPress={() => onCantMakeIt(block)} hitSlop={6}>
-            <Text style={styles.moveButtonText}>Can&apos;t make it</Text>
-          </Pressable>
-        ) : null}
       </View>
+
+      {onMenu ? (
+        <Pressable
+          style={styles.blockMenuButton}
+          onPress={() => onMenu(block)}
+          hitSlop={8}
+          accessibilityLabel="Block options"
+        >
+          <Ionicons name="ellipsis-vertical" size={18} color={C.onSurfaceVariant} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -196,13 +216,15 @@ function DayGroup({
   blocks,
   assignmentsById,
   sessionLabels: labels,
-  onCantMakeIt,
+  pinnedKeys,
+  onMenu,
 }: {
   label: string;
   blocks: ScheduleBlock[];
   assignmentsById: Map<string, Assignment>;
   sessionLabels: Map<string, string>;
-  onCantMakeIt?: (block: ScheduleBlock) => void;
+  pinnedKeys: Set<string>;
+  onMenu?: (block: ScheduleBlock) => void;
 }) {
   return (
     <View style={styles.dayGroup}>
@@ -213,7 +235,8 @@ function DayGroup({
           block={block}
           assignment={assignmentsById.get(block.assignment_id)}
           sessionLabel={labels.get(block.id)}
-          onCantMakeIt={onCantMakeIt}
+          pinned={pinnedKeys.has(pinKey(block.assignment_id, block.start_at))}
+          onMenu={onMenu}
         />
       ))}
     </View>
@@ -240,17 +263,22 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     for (const a of assignmentsById.values()) types.set(a.id, a.task_type as TaskType);
     return sessionLabels(blocks, types);
   }, [blocks, assignmentsById]);
+  const [menuBlock, setMenuBlock] = useState<ScheduleBlock | null>(null);
+  const [arrangeTarget, setArrangeTarget] = useState<{ day: Date; blockId?: string } | null>(null);
+  const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(new Set());
   const [nextLabel, setNextLabel] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
 
   const loadFromDb = useCallback(async () => {
     await schemaReady;
-    const [b, e, a] = await Promise.all([
+    const [b, e, a, pins] = await Promise.all([
       getAllScheduleBlocks(),
       getUpcomingEvents(),
       getAllAssignments(),
+      getPinnedKeys(),
     ]);
+    setPinnedKeys(pins);
     setBlocks(b);
     setEvents(e);
     setAssignmentsById(
@@ -277,51 +305,63 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     };
   }, [loadFromDb]);
 
-  const onCantMakeIt = useCallback(
-    async (block: ScheduleBlock) => {
+  // Every reschedule action goes through here so the spinner shows and the buttons lock until the screen has reloaded.
+  const runReschedule = useCallback(
+    async (action: () => Promise<void>) => {
+      setRerunning(true);
       setRerunError(null);
       try {
-        await markUnavailableAndReschedule(block.start_at, block.end_at);
+        await action();
         await loadFromDb();
       } catch (err) {
         setRerunError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setRerunning(false);
       }
     },
     [loadFromDb],
   );
 
-  const onBusy = useCallback(async () => {
-    const range = await pickBusyRange();
-    if (!range) return;
-    if (range.end <= range.start) {
-      setRerunError('The end time has to be after the start time.');
-      return;
-    }
-    setRerunning(true);
-    setRerunError(null);
-    try {
-      await markUnavailableAndReschedule(range.start.toISOString(), range.end.toISOString());
-      await loadFromDb();
-    } catch (err) {
-      setRerunError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRerunning(false);
-    }
-  }, [loadFromDb]);
+  const applyUnavailable = useCallback(
+    (startAt: string, endAt: string) => runReschedule(() => markUnavailableAndReschedule(startAt, endAt)),
+    [runReschedule],
+  );
 
-  const onRerun = useCallback(async () => {
-    setRerunning(true);
-    setRerunError(null);
-    try {
-      const proposed = await buildProposedSchedule();
-      await commitProposedSchedule(proposed);
-      await loadFromDb();
-    } catch (err) {
-      setRerunError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRerunning(false);
-    }
-  }, [loadFromDb]);
+  const onCantSlot = useCallback(
+    (block: ScheduleBlock) => void applyUnavailable(block.start_at, block.end_at),
+    [applyUnavailable],
+  );
+
+  // Blocking just one slot puts the next session in the slot beside it, so "this day" is its own choice.
+  const onCantDay = useCallback(
+    (block: ScheduleBlock) => {
+      const dayStart = new Date(block.start_at);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(block.start_at);
+      dayEnd.setHours(23, 59, 59, 0);
+      void applyUnavailable(dayStart.toISOString(), dayEnd.toISOString());
+    },
+    [applyUnavailable],
+  );
+
+  const onMove = useCallback(
+    async (block: ScheduleBlock) => {
+      const target = await pickMoment(new Date(block.start_at));
+      if (!target) return;
+      await runReschedule(() => moveBlock(block, target.getTime()));
+    },
+    [runReschedule],
+  );
+
+  const onUnpin = useCallback((block: ScheduleBlock) => runReschedule(() => unpinBlock(block)), [runReschedule]);
+
+  const onRerun = useCallback(
+    () =>
+      runReschedule(async () => {
+        await commitProposedSchedule(await buildProposedSchedule());
+      }),
+    [runReschedule],
+  );
 
   const plannedMinutes = useMemo(
     () => blocks.reduce((sum, block) => sum + blockMinutes(block), 0),
@@ -363,7 +403,6 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
           plannedMinutes={plannedMinutes}
           nextLabel={nextLabel}
           onRerun={onRerun}
-          onBusy={onBusy}
           rerunning={rerunning}
           rerunError={rerunError}
         />
@@ -390,7 +429,8 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
                 blocks={group.blocks}
                 assignmentsById={assignmentsById}
                 sessionLabels={sessionLabelsById}
-                onCantMakeIt={onCantMakeIt}
+                pinnedKeys={pinnedKeys}
+                onMenu={setMenuBlock}
               />
             ))
           )}
@@ -411,6 +451,34 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
       </ScrollView>
 
       <BottomNav active="Schedule" onSelectTab={onSelectTab} />
+
+      <RescheduleOverlay visible={rerunning} />
+
+      <BlockActionSheet
+        visible={menuBlock !== null}
+        title={menuBlock ? (assignmentsById.get(menuBlock.assignment_id)?.title ?? 'Study block') : ''}
+        subtitle={menuBlock ? `${dayLabel(menuBlock.start_at)} · ${formatTime(menuBlock.start_at)} · ${durationLabel(menuBlock.start_at, menuBlock.end_at)}` : ''}
+        pinned={menuBlock ? pinnedKeys.has(pinKey(menuBlock.assignment_id, menuBlock.start_at)) : false}
+        onClose={() => setMenuBlock(null)}
+        onDrag={() => menuBlock && setArrangeTarget({ day: new Date(menuBlock.start_at), blockId: menuBlock.id })}
+        onPickTime={() => menuBlock && void onMove(menuBlock)}
+        onCantSlot={() => menuBlock && onCantSlot(menuBlock)}
+        onCantDay={() => menuBlock && onCantDay(menuBlock)}
+        onUnpin={() => menuBlock && void onUnpin(menuBlock)}
+      />
+
+      {arrangeTarget && (
+        <ArrangeModal
+          initialDay={arrangeTarget.day}
+          highlightBlockId={arrangeTarget.blockId}
+          onClose={() => setArrangeTarget(null)}
+          blocks={blocks}
+          events={events}
+          assignmentsById={assignmentsById}
+          pinnedKeys={pinnedKeys}
+          onMoved={() => void loadFromDb()}
+        />
+      )}
     </View>
   );
 }
@@ -421,11 +489,9 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  busyButton: { alignItems: 'center', marginTop: 10, paddingVertical: 12, borderRadius: 999, borderWidth: 1.5, borderColor: C.primaryContainer },
-  busyButtonText: { fontSize: 14, fontWeight: '600', color: C.primary },
-  moveButton: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVariant },
-  moveButtonText: { fontSize: 12, fontWeight: '600', color: C.onSurfaceVariant },
-  blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary, marginBottom: 2 },
+  blockMenuButton: { alignSelf: 'flex-start', padding: 10 },
+  blockSessionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary },
   // Root
   root: {
     flex: 1,

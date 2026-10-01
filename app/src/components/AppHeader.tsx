@@ -1,11 +1,13 @@
 // Shared top app bar: Cling mascot + screen subtitle on the left, profile
-// (sign-out) on the right. Every screen renders it with its own subtitle so the
+// settings gear on the right. Every screen renders it with its own subtitle so the
 // header stays identical across the app.
 
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
-import { enableOverlay, isOverlayRunning, isOverlaySupported, stopOverlay } from '../pet/overlayBridge';
 import { C } from '../screens/utils/theme';
+import { SettingsSheet } from './SettingsSheet';
 
 const MASCOT_HEADER =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuC97rLKyUV9Wq7oaCGF96bKM-ZcZFwDaOf_anr1pkPschcoSZHzOTCWMgO2vHdPdvNBQ4ubL7gkKTnrh-7oCVahglHJFxPzYl2LI6yBs0iEzDWY81DGZwzEo97rkMht-CH8l6fsvu3KRp0Hh8k0uJkHgW0OLzQqFMXLG1hi2HeApmcMZPmp0QxpOuKIqblB6nN-n_JkK-dIQ-3bjoPEE5OeuqkqsT7BvpGojbwl-zsXaKTQAX53DRxjz2htIdVL9IfalA';
@@ -17,22 +19,7 @@ export function AppHeader({
   subtitle: string;
   onSignOut?: () => void;
 }) {
-  const handleProfilePress = async () => {
-    // Android caps alerts at three buttons: Cancel, the floating-Cling toggle, Sign out.
-    const overlayOn = isOverlaySupported ? await isOverlayRunning() : false;
-    Alert.alert('Cling', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      ...(isOverlaySupported
-        ? [
-            {
-              text: overlayOn ? 'Turn off floating Cling' : 'Turn on floating Cling',
-              onPress: () => (overlayOn ? stopOverlay() : void enableOverlay()),
-            },
-          ]
-        : []),
-      ...(onSignOut ? [{ text: 'Sign out', style: 'destructive' as const, onPress: onSignOut }] : []),
-    ]);
-  };
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <View style={styles.header}>
@@ -48,18 +35,19 @@ export function AppHeader({
           </View>
         </View>
 
-        {/* Right: profile / sign-out */}
+        {/* Right: settings */}
         <View style={styles.headerRight}>
           <Pressable
             style={styles.profileCircle}
-            onPress={handleProfilePress}
+            onPress={() => setSettingsOpen(true)}
             hitSlop={8}
             accessibilityLabel="Settings"
           >
-            <Text style={styles.profileIcon}>👤</Text>
+            <Ionicons name="settings-outline" size={18} color={C.white} />
           </Pressable>
         </View>
       </View>
+      <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} onSignOut={onSignOut} />
     </View>
   );
 }
@@ -129,8 +117,5 @@ const styles = StyleSheet.create({
     backgroundColor: C.primaryContainer,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  profileIcon: {
-    fontSize: 16,
   },
 });
