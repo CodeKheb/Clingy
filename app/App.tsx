@@ -16,7 +16,8 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { ScheduleScreen } from './src/screens/ScheduleScreen';
 import { startBackgroundSync, stopBackgroundSync } from './src/sync/backgroundSync';
-import { syncNow } from './src/sync/syncService';
+import { getMeta } from './src/db/queries';
+import { LAST_SYNCED_KEY, syncNow } from './src/sync/syncService';
 
 type Tab = 'home' | 'schedule';
 
@@ -47,6 +48,7 @@ function AppContent() {
   // bumping syncVersion (used as their key) makes them reload after a sync.
   const [syncVersion, setSyncVersion] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ at: string | null; offline: boolean }>({ at: null, offline: false });
   const syncingRef = useRef(false);
   const lastSyncRef = useRef(0);
   const runSync = useCallback(async () => {
@@ -56,6 +58,7 @@ function AppContent() {
     try {
       const result = await syncNow();
       if (!result.ok) console.warn('[sync] failed:', result.error);
+      setSyncStatus({ at: await getMeta(LAST_SYNCED_KEY), offline: !result.ok });
       lastSyncRef.current = Date.now();
       setSyncVersion((v) => v + 1);
     } finally {
@@ -68,6 +71,7 @@ function AppContent() {
   // foreground (throttled to once a minute).
   useEffect(() => {
     if (signedIn !== true) return;
+    void getMeta(LAST_SYNCED_KEY).then((at) => setSyncStatus((prev) => ({ ...prev, at })));
     void runSync();
     // Periodic sync while the app is closed; the OS decides when it actually runs.
     startBackgroundSync().catch((e) => console.warn('[sync] background sync unavailable:', e));
@@ -170,6 +174,7 @@ function AppContent() {
             <HomeScreen
               key={syncVersion}
               refreshing={refreshing}
+              syncStatus={syncStatus}
               onRefresh={() => void runSync()}
               onSelectTab={(t) => setTab(t === 'Schedule' ? 'schedule' : 'home')}
               onSignOut={() => {

@@ -8,15 +8,24 @@ import {
   deleteEvent,
   getAllAssignments,
   getAllEvents,
+  getAllScheduleBlocks,
+  DISMISSALS_KEY_PREFIX,
+  getDismissedAssignmentIds,
+  getMeta,
+  setMeta,
   upsertAssignments,
   upsertCourses,
   upsertEvents,
   updatePetMood,
 } from '../db/queries';
 import { rescheduleReminders } from '../notifications/reminders';
+import { buildProposedSchedule, commitProposedSchedule } from '../scheduling/scheduler';
 import { moodFromScores } from '../pet/moodAggregation';
 import { scorePriority } from '../priority';
+import { TASK_TYPES, type TaskType } from '../priority/taskProfile';
 import type { CalendarEventResponse, CourseworkResponse } from '../types';
+
+export const LAST_SYNCED_KEY = 'last_synced_at';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -84,8 +93,13 @@ export async function syncNow(): Promise<SyncResult> {
     // so keep only items with a known due date that's now or later, and skip
     // work the student already handed in.
     const now = Date.now();
+    const dismissed = await getDismissedAssignmentIds();
     const coursework = allCoursework.filter(
-      (item) => item.dueAt !== null && new Date(item.dueAt).getTime() >= now && !item.turnedIn,
+      (item) =>
+        item.dueAt !== null &&
+        new Date(item.dueAt).getTime() >= now &&
+        !item.turnedIn &&
+        !dismissed.has(item.id),
     );
 
     const courses = new Map<string, string>();
@@ -96,12 +110,21 @@ export async function syncNow(): Promise<SyncResult> {
       Array.from(courses, ([id, name]) => ({ id, name })),
     );
 
+    // Each dismissal of a task type nudges later tasks of that type down (never below 60%).
+    const dismissalFactor = new Map<string, number>();
+    for (const type of TASK_TYPES) {
+      const count = Number((await getMeta(`${DISMISSALS_KEY_PREFIX}${type}`)) ?? 0);
+      dismissalFactor.set(type, Math.max(0.6, Math.pow(0.9, count)));
+    }
+
     const scored = coursework.map((item) => {
-      const { urgencyScore, suggestedMinutes } = scorePriority({
+      const raw = item.raw as { maxPoints?: number } | null;
+      const { urgencyScore, suggestedMinutes, taskType } = scorePriority({
         id: item.id,
         title: item.title,
         description: item.description,
         dueAt: item.dueAt,
+        maxPoints: typeof raw?.maxPoints === 'number' ? raw.maxPoints : null,
       });
       return {
         id: item.id,
@@ -110,8 +133,9 @@ export async function syncNow(): Promise<SyncResult> {
         description: item.description,
         due_at: item.dueAt,
         raw_json: JSON.stringify(item.raw),
-        urgency_score: urgencyScore,
+        urgency_score: urgencyScore * (dismissalFactor.get(taskType) ?? 1),
         suggested_minutes: suggestedMinutes,
+        task_type: taskType,
       };
     });
     await upsertAssignments(scored);
@@ -138,11 +162,18 @@ export async function syncNow(): Promise<SyncResult> {
     }
 
     const mood = moodFromScores(
-      scored.map((a) => ({ urgencyScore: a.urgency_score, suggestedMinutes: a.suggested_minutes })),
+      scored.map((a) => ({ urgencyScore: a.urgency_score, suggestedMinutes: a.suggested_minutes, taskType: a.task_type as TaskType })),
     );
     await updatePetMood(mood);
 
-    await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
+    await setMeta(LAST_SYNCED_KEY, new Date().toISOString());
+    // Keep an existing schedule in step with the new data (commit also reschedules reminders);
+    // with no schedule yet, just refresh the deadline reminders.
+    if ((await getAllScheduleBlocks()).length > 0) {
+      await commitProposedSchedule(await buildProposedSchedule());
+    } else {
+      await rescheduleReminders().catch((e) => console.warn('[reminders] reschedule failed', e));
+    }
 
     return { ok: true, assignmentCount: scored.length, eventCount: events.length };
   } catch (e) {

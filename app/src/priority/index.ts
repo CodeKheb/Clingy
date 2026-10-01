@@ -1,38 +1,58 @@
 // Owner: Person C
 // Contract: see CONTRACT.md section 3. Person B calls scorePriority() after sync.
 //
-// TFLite scorer (tfliteScorer.ts) is feature-flagged behind USE_TFLITE and only
-// used once initPriorityScorer() has resolved; until then (or if the flag is off
-// or the model fails to load) scorePriority() transparently uses the heuristic.
-// The signature stays synchronous either way — zero changes on Person B's side.
+// What the on-device model does here: when the keywords in a title/description
+// can't tell what kind of work it is (exam, project, writing, ...), MiniLM
+// matches the text against example sentences per type (tfliteScorer.ts).
+// Everything after that (effort, stakes, urgency) is plain math in
+// taskProfile.ts. The signature stays synchronous; before the model has loaded
+// (or if it fails to) classification just uses keywords.
 
-import { scorePriorityHeuristic } from './heuristic';
-import { initPriorityScorer, isPriorityScorerReady, scorePriorityTflite } from './tfliteScorer';
+import {
+  classifyByKeywords,
+  estimateMinutes,
+  stakesFor,
+  urgencyFrom,
+  type TaskType,
+} from './taskProfile';
+import { classifyTypeTflite, initPriorityScorer, isPriorityScorerReady } from './tfliteScorer';
 
 export type PriorityInput = {
   id: string;
   title: string;
   description: string | null;
   dueAt: string | null; // ISO 8601
+  /** Classroom point value, when the course sets one. */
+  maxPoints?: number | null;
 };
 
 export type PriorityOutput = {
   urgencyScore: number; // 0-1, higher = more urgent
   suggestedMinutes: number;
+  taskType: TaskType;
 };
 
-// Set false to force the heuristic everywhere (e.g. if the model misbehaves on-device).
-const USE_TFLITE = true;
-
 export { initPriorityScorer };
+export type { TaskType };
 
-export function scorePriority(input: PriorityInput): PriorityOutput {
-  if (USE_TFLITE && isPriorityScorerReady()) {
+export function classifyTask(input: Pick<PriorityInput, 'title' | 'description'>): TaskType {
+  const byKeyword = classifyByKeywords(input.title, input.description);
+  if (byKeyword) return byKeyword;
+  if (isPriorityScorerReady()) {
     try {
-      return scorePriorityTflite(input);
+      const byModel = classifyTypeTflite(input.title, input.description);
+      if (byModel) return byModel;
     } catch (e) {
-      console.warn('[priority] TFLite scoring failed, falling back to heuristic:', e);
+      console.warn('[priority] model classification failed, using keywords only:', e);
     }
   }
-  return scorePriorityHeuristic(input);
+  return 'general';
+}
+
+export function scorePriority(input: PriorityInput): PriorityOutput {
+  const taskType = classifyTask(input);
+  const maxPoints = input.maxPoints ?? null;
+  const suggestedMinutes = estimateMinutes(taskType, maxPoints, input.description);
+  const urgencyScore = urgencyFrom(input.dueAt, suggestedMinutes, stakesFor(taskType, maxPoints));
+  return { urgencyScore, suggestedMinutes, taskType };
 }

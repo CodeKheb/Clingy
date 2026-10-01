@@ -23,6 +23,7 @@ import {
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
 import { buildProposedSchedule, commitProposedSchedule } from '../scheduling/scheduler';
+import { sessionLabels, type TaskType } from '../priority/taskProfile';
 import { C, urgencyColor, urgencyLabel } from './utils/theme';
 import {
   dayLabel,
@@ -130,9 +131,11 @@ function PlanSummaryCard({
 function BlockCard({
   block,
   assignment,
+  sessionLabel,
 }: {
   block: ScheduleBlock;
   assignment?: Assignment;
+  sessionLabel?: string;
 }) {
   const accent = assignment
     ? urgencyColor(assignment.urgency_score)
@@ -153,6 +156,7 @@ function BlockCard({
 
       {/* Content */}
       <View style={styles.blockBody}>
+        {sessionLabel ? <Text style={styles.blockSession}>{sessionLabel}</Text> : null}
         <Text style={styles.blockTitle} numberOfLines={2}>
           {assignment?.title ?? 'Study block'}
         </Text>
@@ -178,10 +182,12 @@ function DayGroup({
   label,
   blocks,
   assignmentsById,
+  sessionLabels: labels,
 }: {
   label: string;
   blocks: ScheduleBlock[];
   assignmentsById: Map<string, Assignment>;
+  sessionLabels: Map<string, string>;
 }) {
   return (
     <View style={styles.dayGroup}>
@@ -191,6 +197,7 @@ function DayGroup({
           key={block.id}
           block={block}
           assignment={assignmentsById.get(block.assignment_id)}
+          sessionLabel={labels.get(block.id)}
         />
       ))}
     </View>
@@ -212,6 +219,11 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
   const [assignmentsById, setAssignmentsById] = useState<Map<string, Assignment>>(
     new Map(),
   );
+  const sessionLabelsById = useMemo(() => {
+    const types = new Map<string, TaskType>();
+    for (const a of assignmentsById.values()) types.set(a.id, a.task_type as TaskType);
+    return sessionLabels(blocks, types);
+  }, [blocks, assignmentsById]);
   const [nextLabel, setNextLabel] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
@@ -310,7 +322,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
         {/* Proposed study blocks */}
         <View style={styles.section}>
           <SectionHeader
-            icon="🧩"
+            icon="grid-outline"
             title="Proposed Study Blocks"
             right={
               <Badge
@@ -328,6 +340,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
                 label={group.label}
                 blocks={group.blocks}
                 assignmentsById={assignmentsById}
+                sessionLabels={sessionLabelsById}
               />
             ))
           )}
@@ -336,7 +349,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
         {/* Today's calendar */}
         <View style={styles.section}>
           <SectionHeader
-            icon="📅"
+            icon="calendar-outline"
             title="Today's Calendar"
             right={<Badge tone="secondary" label="GCal Offline Sync" />}
           />
@@ -358,6 +371,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary, marginBottom: 2 },
   // Root
   root: {
     flex: 1,

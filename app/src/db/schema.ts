@@ -92,6 +92,15 @@ async function createSchema(db: SQLiteDatabase): Promise<void> {
       mood TEXT NOT NULL DEFAULT 'neutral'
     );
 
+    CREATE TABLE IF NOT EXISTS dismissed_assignments (
+      id TEXT PRIMARY KEY
+    );
+
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS embeddings (
       id TEXT PRIMARY KEY,
       entity_type TEXT NOT NULL,
@@ -104,6 +113,7 @@ async function createSchema(db: SQLiteDatabase): Promise<void> {
   `);
 
   await addColumnIfMissing(db, 'events', 'weight', 'REAL NOT NULL DEFAULT 1');
+  await addColumnIfMissing(db, 'assignments', 'task_type', "TEXT NOT NULL DEFAULT 'general'");
   await db.execAsync(`INSERT OR IGNORE INTO pet_state (id, mood) VALUES (1, 'neutral');`);
 
   // Migrate valid vectors from earlier per-row columns into the canonical table.

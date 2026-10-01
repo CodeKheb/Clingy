@@ -19,10 +19,9 @@ import { loadTensorflowModel } from 'react-native-fast-tflite';
 import type { TfliteModel, Tensor } from 'react-native-fast-tflite';
 
 import { MAX_SEQUENCE_LENGTH, tokenize } from './tokenizer';
-import type { PriorityInput, PriorityOutput } from './index';
+import type { TaskType } from './taskProfile';
 
 const EMBED_DIM = 384; // all-MiniLM-L6-v2 output dimension
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Per-HANDOFF flatbuffer trace: signature `inputs_1` → tensor 0 → GATHER = input_ids,
 // signature `inputs` → tensor 1 → RESHAPE = attention_mask. Used as the tie-breaker
@@ -30,22 +29,24 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const TRACED_IDS_INDEX = 0;
 const TRACED_MASK_INDEX = 1;
 
-// --- Urgency anchors ---------------------------------------------------------
-// Each anchor is a phrase embedded once at init. An assignment's text urgency is
-// driven by its best-matching anchor: sim * urgency. baseMinutes seeds the
-// suggested-time estimate for that kind of work.
-type Anchor = { text: string; urgency: number; baseMinutes: number };
-
-const URGENCY_ANCHORS: Anchor[] = [
-  { text: 'overdue assignment, submit as soon as possible for partial credit', urgency: 1.0, baseMinutes: 45 },
-  { text: 'midterm exam tomorrow, cumulative, worth 30% of your grade, study', urgency: 1.0, baseMinutes: 120 },
-  { text: 'final project due soon, high stakes, must be demoed live in class', urgency: 0.95, baseMinutes: 180 },
-  { text: 'homework problem set due this week', urgency: 0.7, baseMinutes: 90 },
-  { text: 'short quiz next week, low stakes', urgency: 0.55, baseMinutes: 45 },
-  { text: 'lab report write-up due in two weeks', urgency: 0.4, baseMinutes: 90 },
-  { text: 'no due date yet, instructor will announce later', urgency: 0.2, baseMinutes: 60 },
-  { text: 'optional reading, not graded, just recommended background', urgency: 0.1, baseMinutes: 30 },
+// Sentences describing each kind of coursework; the model matches an assignment's
+// text to the closest one when keywords can't tell (see taskProfile.ts).
+const TYPE_ANCHORS: { type: TaskType; text: string }[] = [
+  { type: 'exam', text: 'quiz or exam, prepare and study for the test' },
+  { type: 'exam', text: 'midterm or final examination covering the lessons' },
+  { type: 'project', text: 'group project, build a prototype and present or demo it' },
+  { type: 'project', text: 'final output, system design, implementation and presentation' },
+  { type: 'writing', text: 'write an essay, paper or reflection and submit the document' },
+  { type: 'writing', text: 'written report with analysis, discussion and conclusion' },
+  { type: 'problemset', text: 'homework, solve the problems and exercises' },
+  { type: 'problemset', text: 'activity sheet, answer the questions and compute' },
+  { type: 'admin', text: 'submit a screenshot or proof, fill out a form or survey' },
+  { type: 'reading', text: 'optional reading or video to watch, background material' },
 ];
+
+// Below this cosine similarity the text isn't a convincing match for any type.
+const TYPE_MATCH_THRESHOLD = 0.3;
+
 
 // --- Init state --------------------------------------------------------------
 
@@ -54,7 +55,7 @@ type ScorerState = {
   idsIndex: number; // which input tensor is input_ids (resolved empirically)
   maskIndex: number; // which input tensor is attention_mask
   orderHow: InputOrder['how'];
-  anchors: { anchor: Anchor; embedding: number[] }[];
+  typeAnchors: { type: TaskType; embedding: number[] }[];
 };
 
 let state: ScorerState | null = null;
@@ -81,12 +82,12 @@ export function initPriorityScorer(): Promise<boolean> {
 
       const order = await resolveInputOrder(model, idsIndex, maskIndex);
 
-      const anchors = URGENCY_ANCHORS.map((anchor) => ({
-        anchor,
-        embedding: embedWithModel(model, order.idsIndex, order.maskIndex, anchor.text),
+      const typeAnchors = TYPE_ANCHORS.map(({ type, text }) => ({
+        type,
+        embedding: embedWithModel(model, order.idsIndex, order.maskIndex, text),
       }));
 
-      state = { model, idsIndex: order.idsIndex, maskIndex: order.maskIndex, orderHow: order.how, anchors };
+      state = { model, idsIndex: order.idsIndex, maskIndex: order.maskIndex, orderHow: order.how, typeAnchors };
 
       if (__DEV__) {
         console.log(
@@ -190,39 +191,6 @@ function l2Normalize(v: number[]): number[] {
   return norm === 0 ? v : v.map((x) => x / norm);
 }
 
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-
-/**
- * Maps time-to-due-date onto 0..1 urgency.
- * Overdue → 1, then exponential decay with a 7-day half-life-ish curve.
- * No due date → 0 (caller decides how that combines).
- */
-export function dueUrgencyFrom(dueAt: string | null, now: number = Date.now()): number {
-  if (dueAt === null) return 0;
-  const days = (new Date(dueAt).getTime() - now) / DAY_MS;
-  if (days <= 0) return 1;
-  return Math.exp(-days / 7);
-}
-
-/** Combines due-date urgency and text urgency into the final 0..1 score. */
-export function combineUrgency(dueUrgency: number, textUrgency: number, hasDueDate: boolean): number {
-  if (!hasDueDate) {
-    // No date to lean on: stay low, but reward urgency cues in the text a bit.
-    return clamp01(0.05 + 0.25 * textUrgency);
-  }
-  return clamp01(0.7 * dueUrgency + 0.3 * textUrgency);
-}
-
-const MINUTES_MIN = 15;
-const MINUTES_MAX = 240;
-
-export function suggestedMinutesFrom(baseMinutes: number, urgencyScore: number): number {
-  return Math.min(
-    MINUTES_MAX,
-    Math.max(MINUTES_MIN, Math.round(baseMinutes * (0.6 + 0.8 * urgencyScore)))
-  );
-}
-
 // --- Input order resolution (the go/no-go de-risking) ------------------------
 
 type InputOrder = { idsIndex: number; maskIndex: number; how: 'metadata' | 'probed' | 'traced-default' };
@@ -314,33 +282,16 @@ export function verifyEmbeddingSanity(): SanityReport {
   return report;
 }
 
-// --- CONTRACT.md interface ---------------------------------------------------
-
-/** TFLite-backed scorePriority — synchronous, requires initPriorityScorer() to have resolved. */
-export function scorePriorityTflite(input: PriorityInput): PriorityOutput {
-  if (!state) throw new Error('[priority] TFLite scorer not initialized — call initPriorityScorer() first');
-
-  const text = [input.title, input.description].filter(Boolean).join('. ');
-  const embedding = embedText(text);
-
-  // Text urgency: best anchor match, scaled by that anchor's urgency level.
-  let textUrgency = 0;
-  let bestBaseMinutes = 45;
-  let bestSim = -1;
-  for (const { anchor, embedding: anchorEmb } of state.anchors) {
+/** Closest task type by embedding similarity, or null if nothing is a convincing match. Requires init. */
+export function classifyTypeTflite(title: string, description: string | null): TaskType | null {
+  if (!state) return null;
+  const embedding = embedText([title, description].filter(Boolean).join('. '));
+  let best: { type: TaskType; sim: number } | null = null;
+  for (const { type, embedding: anchorEmb } of state.typeAnchors) {
     const sim = cosineSimilarity(embedding, anchorEmb);
-    textUrgency = Math.max(textUrgency, sim * anchor.urgency);
-    if (sim > bestSim) {
-      bestSim = sim;
-      bestBaseMinutes = anchor.baseMinutes;
-    }
+    if (!best || sim > best.sim) best = { type, sim };
   }
-
-  const dueUrgency = dueUrgencyFrom(input.dueAt);
-  const urgencyScore = combineUrgency(dueUrgency, textUrgency, input.dueAt !== null);
-
-  return {
-    urgencyScore,
-    suggestedMinutes: suggestedMinutesFrom(bestBaseMinutes, urgencyScore),
-  };
+  return best && best.sim >= TYPE_MATCH_THRESHOLD ? best.type : null;
 }
+
+// --- CONTRACT.md interface ---------------------------------------------------

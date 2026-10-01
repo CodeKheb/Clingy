@@ -21,6 +21,8 @@ export type Assignment = {
   raw_json: string | null;
   urgency_score: number;
   suggested_minutes: number;
+  /** exam | project | writing | problemset | reading | general (see priority/taskProfile.ts) */
+  task_type: string;
   embedding: string | null;
 };
 
@@ -68,6 +70,7 @@ export type AssignmentInput = {
   raw_json?: string | null;
   urgency_score?: number;
   suggested_minutes?: number;
+  task_type?: string;
   embedding?: string | number[] | null;
 };
 
@@ -229,8 +232,8 @@ export async function upsertAssignment(assignment: AssignmentInput, database?: S
   }
 
   await db.runAsync(
-    `INSERT INTO assignments (id, course_id, title, description, due_at, raw_json, urgency_score, suggested_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO assignments (id, course_id, title, description, due_at, raw_json, urgency_score, suggested_minutes, task_type)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        course_id = excluded.course_id,
        title = excluded.title,
@@ -238,7 +241,8 @@ export async function upsertAssignment(assignment: AssignmentInput, database?: S
        due_at = excluded.due_at,
        raw_json = excluded.raw_json,
        urgency_score = CASE WHEN ? IS NULL THEN assignments.urgency_score ELSE excluded.urgency_score END,
-        suggested_minutes = CASE WHEN ? IS NULL THEN assignments.suggested_minutes ELSE excluded.suggested_minutes END;`,
+        suggested_minutes = CASE WHEN ? IS NULL THEN assignments.suggested_minutes ELSE excluded.suggested_minutes END,
+       task_type = excluded.task_type;`,
     assignment.id,
     courseId,
     assignment.title,
@@ -247,6 +251,7 @@ export async function upsertAssignment(assignment: AssignmentInput, database?: S
     rawJson,
     urgencyScore,
     suggestedMinutes,
+    assignment.task_type ?? 'general',
     assignment.urgency_score ?? null,
     assignment.suggested_minutes ?? null,
   );
@@ -613,4 +618,44 @@ export async function clearAllData(database?: SQLiteDatabase): Promise<void> {
     await db.runAsync('DELETE FROM events;');
     await db.runAsync("UPDATE pet_state SET mood = 'neutral' WHERE id = 1;");
   });
+}
+
+// ---------------------------------------------------------------------------
+// Dismissed assignments + app meta
+// ---------------------------------------------------------------------------
+
+export const DISMISSALS_KEY_PREFIX = 'dismissals:';
+
+/** Deletes the assignment and remembers its id so later syncs don't bring it back. */
+export async function dismissAssignment(id: string, database?: SQLiteDatabase): Promise<void> {
+  const db = await getDb(database);
+  // Count dismissals per task type: sync turns a pile of dismissed "reading" tasks into lower scores for reading.
+  const row = await db.getFirstAsync<{ task_type: string }>('SELECT task_type FROM assignments WHERE id = ?;', id);
+  if (row) {
+    const key = `${DISMISSALS_KEY_PREFIX}${row.task_type}`;
+    await setMeta(key, String(Number((await getMeta(key, db)) ?? 0) + 1), db);
+  }
+  await db.runAsync('INSERT OR IGNORE INTO dismissed_assignments (id) VALUES (?);', id);
+  await deleteAssignment(id, db);
+}
+
+export async function getDismissedAssignmentIds(database?: SQLiteDatabase): Promise<Set<string>> {
+  const db = await getDb(database);
+  const rows = await db.getAllAsync<{ id: string }>('SELECT id FROM dismissed_assignments;');
+  return new Set(rows.map((r) => r.id));
+}
+
+export async function getMeta(key: string, database?: SQLiteDatabase): Promise<string | null> {
+  const db = await getDb(database);
+  const row = await db.getFirstAsync<{ value: string }>('SELECT value FROM app_meta WHERE key = ?;', key);
+  return row?.value ?? null;
+}
+
+export async function setMeta(key: string, value: string, database?: SQLiteDatabase): Promise<void> {
+  const db = await getDb(database);
+  await db.runAsync(
+    'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;',
+    key,
+    value,
+  );
 }

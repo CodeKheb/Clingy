@@ -11,8 +11,17 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { getUpcomingAssignments, getUpcomingScheduleBlocks } from '../db/queries';
+import { sessionLabels, type TaskType } from '../priority/taskProfile';
 
 const CHANNEL_ID = 'deadlines';
+
+const HOUR_MS = 60 * 60 * 1000;
+// A heads-up a day out, a nudge two hours out, and the deadline itself.
+const DEADLINE_REMINDERS = [
+  { beforeMs: 24 * HOUR_MS, title: 'Due tomorrow' },
+  { beforeMs: 2 * HOUR_MS, title: 'Due in 2 hours' },
+  { beforeMs: 0, title: 'Due now' },
+];
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -60,18 +69,20 @@ export async function rescheduleReminders(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const now = Date.now();
+  const types = new Map(assignments.map((a) => [a.id, a.task_type as TaskType]));
+  const labels = sessionLabels(blocks, types);
 
   for (const assignment of assignments) {
     if (!assignment.due_at) continue;
-    const dueAt = new Date(assignment.due_at);
-    if (dueAt.getTime() <= now) continue;
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Deadline coming up',
-        body: assignment.title,
-      },
-      trigger: dateTrigger(dueAt),
-    });
+    const dueMs = new Date(assignment.due_at).getTime();
+    for (const reminder of DEADLINE_REMINDERS) {
+      const fireAt = dueMs - reminder.beforeMs;
+      if (fireAt <= now) continue;
+      await Notifications.scheduleNotificationAsync({
+        content: { title: reminder.title, body: assignment.title },
+        trigger: dateTrigger(new Date(fireAt)),
+      });
+    }
   }
 
   for (const block of blocks) {
@@ -80,7 +91,7 @@ export async function rescheduleReminders(): Promise<void> {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Study time',
-        body: block.assignment_title,
+        body: `${labels.get(block.id) ?? 'Study session'}: ${block.assignment_title}`,
       },
       trigger: dateTrigger(startAt),
     });

@@ -14,7 +14,7 @@ import { EmptyState } from '../components/EmptyState';
 import { SectionHeader } from '../components/SectionHeader';
 import {
   type Assignment,
-  deleteAssignment,
+  dismissAssignment,
   getUpcomingAssignments,
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
@@ -181,7 +181,7 @@ function AIPriorityQueue({
 
   return (
     <View style={styles.section}>
-      <SectionHeader icon="🤖" title="AI Priority Queue" />
+      <SectionHeader icon="sparkles" title="AI Priority Queue" />
 
       {/* Hero task */}
       {hero ? (
@@ -202,15 +202,23 @@ function AIPriorityQueue({
 // Main screen
 // ---------------------------------------------------------------------------
 
+function describeSync({ at, offline }: { at: string | null; offline: boolean }): string {
+  if (!at) return offline ? 'Offline' : 'Not synced yet';
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 60000));
+  const ago = minutes < 1 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
+  return offline ? `Offline, saved ${ago}` : `Synced ${ago}`;
+}
+
 export type HomeScreenProps = {
   onSelectTab?: (tab: import('../components/BottomNav').NavTab) => void;
   onSignOut?: () => void;
   onStartTask?: () => void;
   refreshing?: boolean;
   onRefresh?: () => void;
+  syncStatus?: { at: string | null; offline: boolean };
 };
 
-export function HomeScreen({ onSelectTab, onSignOut, onStartTask, refreshing = false, onRefresh }: HomeScreenProps) {
+export function HomeScreen({ onSelectTab, onSignOut, onStartTask, refreshing = false, onRefresh, syncStatus }: HomeScreenProps) {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [dueThisWeek, setDueThisWeek] = useState(0);
 
@@ -231,7 +239,7 @@ export function HomeScreen({ onSelectTab, onSignOut, onStartTask, refreshing = f
   const onDismissAssignment = useCallback(
     async (id: string) => {
       try {
-        await deleteAssignment(id);
+        await dismissAssignment(id);
         await loadFromDb();
       } catch (err) {
         console.warn('[HomeScreen] Failed to dismiss assignment:', err);
@@ -258,7 +266,7 @@ export function HomeScreen({ onSelectTab, onSignOut, onStartTask, refreshing = f
 
   return (
     <View style={styles.root}>
-      <AppHeader subtitle="Home Dashboard" onSignOut={onSignOut} />
+      <AppHeader subtitle={syncStatus ? `Home Dashboard · ${describeSync(syncStatus)}` : 'Home Dashboard'} onSignOut={onSignOut} />
 
       <ScrollView
         style={styles.scrollView}
