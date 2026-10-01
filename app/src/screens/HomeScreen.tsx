@@ -40,6 +40,7 @@ export function HomeScreen() {
     <View style={{ flex: 1 }}>
       {error && <Text style={{ color: 'red', padding: 8 }}>{error}</Text>}
       <FlatList
+        style={{ flex: 1 }}
         data={assignments}
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

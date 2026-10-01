@@ -67,8 +67,15 @@ export async function syncNow(): Promise<SyncResult> {
       return { ok: false, error: `events fetch failed (${eventsRes.status})` };
     }
 
-    const coursework = (await courseworkRes.json()) as CourseworkResponse;
+    const allCoursework = (await courseworkRes.json()) as CourseworkResponse;
     const events = (await eventsRes.json()) as CalendarEventResponse;
+
+    // Classroom's courseWork.list() returns full history with no date filter,
+    // so keep only items with a known due date that's now or later.
+    const now = Date.now();
+    const coursework = allCoursework.filter(
+      (item) => item.dueAt !== null && new Date(item.dueAt).getTime() >= now,
+    );
 
     const courses = new Map<string, string>();
     for (const item of coursework) {

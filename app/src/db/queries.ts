@@ -293,6 +293,7 @@ export async function getUpcomingAssignments(database?: SQLiteDatabase): Promise
   return await db.getAllAsync<Assignment>(
     `SELECT assignments.*, (SELECT vector FROM embeddings WHERE entity_type = 'assignment' AND entity_id = assignments.id ORDER BY created_at DESC LIMIT 1) AS embedding
      FROM assignments
+     WHERE due_at IS NOT NULL AND julianday(due_at) >= julianday('now')
      ORDER BY urgency_score DESC, due_at ASC NULLS LAST;`
   );
 }
