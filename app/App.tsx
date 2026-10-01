@@ -1,7 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { schemaReady } from './src/db/schema';
 import { initPriorityScorer } from './src/priority';
 import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
@@ -25,16 +26,44 @@ export default function App() {
         const report = verifyEmbeddingSanity();
         console.log(
           `[priority] sanity ${report.ok ? 'PASS' : 'FAIL'} — similar=${report.similarPairSimilarity.toFixed(3)} ` +
-            `different=${report.differentPairSimilarity.toFixed(3)} order=${report.inputOrder}`
+          `different=${report.differentPairSimilarity.toFixed(3)} order=${report.inputOrder}`
         );
       }
     });
   }, []);
 
+  const [databaseStatus, setDatabaseStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let mounted = true;
+    schemaReady.then(
+      () => mounted && setDatabaseStatus('ready'),
+      (error) => {
+        console.error('Failed to initialize the local database:', error);
+        if (mounted) setDatabaseStatus('error');
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (databaseStatus !== 'ready') {
+    return (
+      <View style={styles.container}>
+        {databaseStatus === 'loading' ? (
+          <ActivityIndicator accessibilityLabel="Preparing local database" />
+        ) : (
+          <Text>Could not prepare local data. Please restart the app.</Text>
+        )}
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
   return (
     <View style={styles.container}>
       <PetScreen />
-      <PetFloatingFallback mood={mood} onPress={() => {}} />
+      <PetFloatingFallback mood={mood} onPress={() => { }} />
       <StatusBar style="auto" />
     </View>
   );
