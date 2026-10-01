@@ -13,36 +13,42 @@ classroomRouter.get("/coursework", async (req, res) => {
     return;
   }
 
-  const client = createOAuthClient();
-  client.setCredentials({ access_token: accessToken });
-  const classroom = google.classroom({ version: "v1", auth: client });
+  try {
+    const client = createOAuthClient();
+    client.setCredentials({ access_token: accessToken });
+    const classroom = google.classroom({ version: "v1", auth: client });
 
-  const courses = await classroom.courses.list();
-  const result: CourseworkResponse = [];
+    const courses = await classroom.courses.list();
+    const result: CourseworkResponse = [];
 
-  for (const course of courses.data.courses ?? []) {
-    const coursework = await classroom.courses.courseWork.list({ courseId: course.id! });
-    for (const work of coursework.data.courseWork ?? []) {
-      result.push({
-        id: work.id!,
-        courseId: course.id!,
-        courseName: course.name ?? "",
-        title: work.title ?? "",
-        description: work.description ?? null,
-        dueAt:
-          work.dueDate && work.dueTime
-            ? new Date(
-                work.dueDate.year!,
-                (work.dueDate.month ?? 1) - 1,
-                work.dueDate.day!,
-                work.dueTime.hours ?? 0,
-                work.dueTime.minutes ?? 0
-              ).toISOString()
-            : null,
-        raw: work,
-      });
+    for (const course of courses.data.courses ?? []) {
+      const coursework = await classroom.courses.courseWork.list({ courseId: course.id! });
+      for (const work of coursework.data.courseWork ?? []) {
+        let dueAt: string | null = null;
+        if (work.dueDate) {
+          const year = work.dueDate.year!;
+          const month = (work.dueDate.month ?? 1) - 1;
+          const day = work.dueDate.day!;
+          const hours = work.dueTime?.hours ?? 23;
+          const minutes = work.dueTime?.minutes ?? 59;
+          dueAt = new Date(Date.UTC(year, month, day, hours, minutes)).toISOString();
+        }
+
+        result.push({
+          id: work.id!,
+          courseId: course.id!,
+          courseName: course.name ?? "",
+          title: work.title ?? "",
+          description: work.description ?? null,
+          dueAt,
+          raw: work,
+        });
+      }
     }
-  }
 
-  res.json(result);
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error fetching coursework:", error?.message || error);
+    res.status(error?.code === 401 ? 401 : 500).json({ error: "Failed to fetch coursework from Google Classroom" });
+  }
 });
