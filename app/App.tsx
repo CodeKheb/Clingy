@@ -15,6 +15,7 @@ import { ClingPanel } from './src/screens/ClingPanel';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { ScheduleScreen } from './src/screens/ScheduleScreen';
+import { startBackgroundSync, stopBackgroundSync } from './src/sync/backgroundSync';
 import { syncNow } from './src/sync/syncService';
 
 type Tab = 'home' | 'schedule';
@@ -68,6 +69,8 @@ function AppContent() {
   useEffect(() => {
     if (signedIn !== true) return;
     void runSync();
+    // Periodic sync while the app is closed; the OS decides when it actually runs.
+    startBackgroundSync().catch((e) => console.warn('[sync] background sync unavailable:', e));
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && Date.now() - lastSyncRef.current > 60_000) void runSync();
     });
@@ -171,6 +174,7 @@ function AppContent() {
               onSelectTab={(t) => setTab(t === 'Schedule' ? 'schedule' : 'home')}
               onSignOut={() => {
                 void signOut();
+                void stopBackgroundSync();
                 setSignedIn(false);
               }}
               onStartTask={() => setPanelOpen(true)}
@@ -181,6 +185,7 @@ function AppContent() {
               onSelectTab={(t) => setTab(t === 'Home' ? 'home' : 'schedule')}
               onSignOut={() => {
                 void signOut();
+                void stopBackgroundSync();
                 setSignedIn(false);
               }}
             />
