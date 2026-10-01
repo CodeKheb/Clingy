@@ -4,8 +4,10 @@
 
 import {
   clearScheduleBlocks,
+  getMeta,
   getUpcomingAssignments,
   getUpcomingEvents,
+  setMeta,
   upsertScheduleBlocks,
   type Assignment,
 } from '../db/queries';
@@ -20,6 +22,29 @@ const SESSION_GAP_MINUTES = 10; // breathing room after each session
 const MAX_DAY_MINUTES = 240; // don't cram more than 4h of study into one day
 const HOUR_MS = 60 * 60 * 1000;
 const LOOKAHEAD_DAYS = 14;
+
+const UNAVAILABLE_KEY = 'unavailable_windows';
+
+async function loadUnavailable(now: number): Promise<FreeSlot[]> {
+  try {
+    const parsed = JSON.parse((await getMeta(UNAVAILABLE_KEY)) ?? '[]') as FreeSlot[];
+    return parsed.filter((w) => w.end > now); // past windows no longer matter
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remembers a time range the student can't study in, then rebuilds the whole
+ * schedule around it. Windows persist, so the automatic rebuild after each
+ * sync won't put work back there.
+ */
+export async function markUnavailableAndReschedule(startAt: string, endAt: string): Promise<void> {
+  const windows = await loadUnavailable(Date.now());
+  windows.push({ start: new Date(startAt).getTime(), end: new Date(endAt).getTime() });
+  await setMeta(UNAVAILABLE_KEY, JSON.stringify(windows));
+  await commitProposedSchedule(await buildProposedSchedule());
+}
 
 export type ProposedBlock = {
   assignmentId: string;
@@ -94,10 +119,13 @@ export async function buildProposedSchedule(now: number = Date.now()): Promise<P
     dayStarts.push(day.getTime());
   }
 
-  const eventWindows: FreeSlot[] = events.map((e) => ({
-    start: new Date(e.start_at).getTime(),
-    end: new Date(e.end_at).getTime(),
-  }));
+  const eventWindows: FreeSlot[] = [
+    ...events.map((e) => ({
+      start: new Date(e.start_at).getTime(),
+      end: new Date(e.end_at).getTime(),
+    })),
+    ...(await loadUnavailable(now)),
+  ];
 
   const blocks: ProposedBlock[] = [];
 

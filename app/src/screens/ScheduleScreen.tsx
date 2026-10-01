@@ -22,7 +22,7 @@ import {
   getUpcomingEvents,
 } from '../db/queries';
 import { schemaReady } from '../db/schema';
-import { buildProposedSchedule, commitProposedSchedule } from '../scheduling/scheduler';
+import { buildProposedSchedule, commitProposedSchedule, markUnavailableAndReschedule } from '../scheduling/scheduler';
 import { sessionLabels, type TaskType } from '../priority/taskProfile';
 import { C, urgencyColor, urgencyLabel } from './utils/theme';
 import {
@@ -132,10 +132,12 @@ function BlockCard({
   block,
   assignment,
   sessionLabel,
+  onCantMakeIt,
 }: {
   block: ScheduleBlock;
   assignment?: Assignment;
   sessionLabel?: string;
+  onCantMakeIt?: (block: ScheduleBlock) => void;
 }) {
   const accent = assignment
     ? urgencyColor(assignment.urgency_score)
@@ -173,6 +175,11 @@ function BlockCard({
             </Text>
           ) : null}
         </View>
+        {onCantMakeIt ? (
+          <Pressable style={styles.moveButton} onPress={() => onCantMakeIt(block)} hitSlop={6}>
+            <Text style={styles.moveButtonText}>Can&apos;t make it</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -183,11 +190,13 @@ function DayGroup({
   blocks,
   assignmentsById,
   sessionLabels: labels,
+  onCantMakeIt,
 }: {
   label: string;
   blocks: ScheduleBlock[];
   assignmentsById: Map<string, Assignment>;
   sessionLabels: Map<string, string>;
+  onCantMakeIt?: (block: ScheduleBlock) => void;
 }) {
   return (
     <View style={styles.dayGroup}>
@@ -198,6 +207,7 @@ function DayGroup({
           block={block}
           assignment={assignmentsById.get(block.assignment_id)}
           sessionLabel={labels.get(block.id)}
+          onCantMakeIt={onCantMakeIt}
         />
       ))}
     </View>
@@ -260,6 +270,19 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
       active = false;
     };
   }, [loadFromDb]);
+
+  const onCantMakeIt = useCallback(
+    async (block: ScheduleBlock) => {
+      setRerunError(null);
+      try {
+        await markUnavailableAndReschedule(block.start_at, block.end_at);
+        await loadFromDb();
+      } catch (err) {
+        setRerunError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [loadFromDb],
+  );
 
   const onRerun = useCallback(async () => {
     setRerunning(true);
@@ -341,6 +364,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
                 blocks={group.blocks}
                 assignmentsById={assignmentsById}
                 sessionLabels={sessionLabelsById}
+                onCantMakeIt={onCantMakeIt}
               />
             ))
           )}
@@ -371,6 +395,8 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  moveButton: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVariant },
+  moveButtonText: { fontSize: 12, fontWeight: '600', color: C.onSurfaceVariant },
   blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary, marginBottom: 2 },
   // Root
   root: {
