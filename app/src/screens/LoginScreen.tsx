@@ -1,4 +1,4 @@
-// Owner: Person A — Google login screen, uses auth/googleAuth.ts.
+// Google login screen, uses auth/googleAuth.ts.
 // Styled to match the app's shared design system (src/screens/utils/theme.ts):
 // dark Material You surface, rounded pills, orange primary CTA. The mascot hero
 // mirrors the Stitch mockup (warm hero, mascot, single Google button, ToS note).

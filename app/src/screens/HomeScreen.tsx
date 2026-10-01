@@ -1,4 +1,4 @@
-// Owner: Person B — renders assignments/events from SQLite, works offline.
+// Renders assignments/events from SQLite, works offline.
 //
 // Layout: a greeting with the week at a glance, today's study sessions, the one task to
 // start next (with progress), then a compact list of what's coming up. Shared pieces

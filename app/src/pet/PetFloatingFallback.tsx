@@ -1,4 +1,4 @@
-// Owner: Person C — in-app floating Cling (mascot), no special permissions required.
+// In-app floating Cling (mascot), no special permissions required.
 // Build this FIRST as the safety net before attempting the native overlay bubble.
 
 import { useState } from 'react';
@@ -17,7 +17,7 @@ export type PetFloatingFallbackProps = {
   bottomInset?: number;
 };
 
-// Floating bubble renders smaller than the full-size PetScreen display.
+// The floating bubble renders at 60% of the sprite's native size.
 const FLOATING_SCALE = 0.6;
 const WIDGET_WIDTH = CLING_NATIVE_WIDTH * FLOATING_SCALE;
 const WIDGET_HEIGHT = CLING_NATIVE_HEIGHT * FLOATING_SCALE;

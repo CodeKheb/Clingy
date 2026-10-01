@@ -1,4 +1,4 @@
-// Owner: Person C — plays a looping Cling frame animation from clingFrames.ts.
+// Plays a looping Cling frame animation from clingFrames.ts.
 
 import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';

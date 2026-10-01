@@ -9,7 +9,6 @@
  * `configureSync()` must have been called beforehand to make an access token
  * available during a headless launch (there is no caller to supply one then).
  *
- * Owner: Person B.
  */
 
 import * as BackgroundTask from 'expo-background-task';

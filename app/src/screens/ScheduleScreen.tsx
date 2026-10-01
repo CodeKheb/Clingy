@@ -1,7 +1,7 @@
-// Owner: Person B — renders proposed time blocks from scheduling/scheduler.ts.
+// Renders proposed time blocks from scheduling/scheduler.ts.
 //
 // Reads schedule_blocks/events from SQLite and joins blocks to their assignment
-// for title + urgency. Layout follows DESIGN.md and reuses the shared design
+// for title + urgency. Layout reuses the shared design
 // system (src/theme.ts + src/components/) so it matches HomeScreen exactly.
 
 import { Ionicons } from '@expo/vector-icons';

@@ -1,4 +1,4 @@
-// Mirrors backend/src/types.ts and CONTRACT.md — keep in sync.
+// Mirrors backend/src/types.ts — keep in sync.
 
 export type CourseworkResponse = {
   id: string;

@@ -1,8 +1,8 @@
-// Owner: Person A — app-side OAuth screen, calls backend /auth/google/* routes,
+// App-side OAuth screen, calls backend /auth/google/* routes,
 // stores tokens for use by sync/syncService.ts.
 //
 // The backend (not the app) holds the Google OAuth client secret and does the
-// code exchange (CONTRACT.md section 1: /auth/google/url, /auth/google/callback,
+// code exchange (/auth/google/url, /auth/google/callback,
 // /auth/refresh). This module just: asks the backend for a consent URL, opens it
 // in a browser, catches the token-bearing redirect back into the app via its
 // custom scheme, and persists tokens in SecureStore.

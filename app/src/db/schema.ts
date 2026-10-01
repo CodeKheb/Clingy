@@ -1,5 +1,4 @@
-// Owner: Person B
-// Contract: see CONTRACT.md section 2. Embeddings are stored in the dedicated
+// Embeddings are stored in the dedicated
 // embeddings table so each entity has one canonical vector record.
 
 import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';

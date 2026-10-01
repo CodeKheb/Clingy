@@ -26,7 +26,7 @@ import com.clingy.R
 // Draws a draggable, animated bubble over other apps using WindowManager, and
 // opens the app's RN panel screen (via its own deep link) when tapped, rather
 // than rendering RN/Fabric content directly inside this Service — that path
-// is unsupported without an Activity. See PLAN.md.
+// is unsupported without an Activity.
 //
 // Mirrors (in native code) the two RN pieces this bubble has no other way to
 // share with: pet/clingFrames.ts (frame sequences/durations) and

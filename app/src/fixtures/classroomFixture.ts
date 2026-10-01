@@ -1,7 +1,7 @@
 // Hardcoded stand-in for GET /classroom/coursework and GET /calendar/events
-// (see CONTRACT.md section 1) until the backend endpoints are live.
+// (see src/types.ts) for the first launch, before any sync has run.
 // syncService.ts reads from here so HomeScreen/priority work isn't blocked
-// on Person A's backend.
+// on the backend.
 
 import type { CalendarEventResponse, CourseworkResponse } from '../types';
 

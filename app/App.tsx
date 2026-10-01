@@ -21,8 +21,14 @@ import { LAST_SYNCED_KEY, syncNow } from './src/sync/syncService';
 
 type Tab = 'home' | 'schedule';
 
-function isClingPanelUrl(url: string | null): boolean {
-  return url !== null && Linking.parse(url).hostname === 'cling-panel';
+type DeepLink = 'panel' | Tab | null;
+
+/** clingy://cling-panel opens the chat; clingy://home and clingy://schedule open those tabs. */
+function parseDeepLink(url: string | null): DeepLink {
+  if (url === null) return null;
+  const host = Linking.parse(url).hostname;
+  if (host === 'cling-panel') return 'panel';
+  return host === 'home' || host === 'schedule' ? host : null;
 }
 
 export default function App() {
@@ -103,25 +109,29 @@ function AppContent() {
   useEffect(() => {
     // Opened via the overlay bubble's clingy://cling-panel deep link, or the
     // in-app floating fallback's onPress below.
-    void Linking.getInitialURL().then((url) => {
-      if (isClingPanelUrl(url)) setPanelOpen(true);
-    });
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      if (isClingPanelUrl(url)) setPanelOpen(true);
-    });
+    const open = (url: string | null) => {
+      const target = parseDeepLink(url);
+      if (target === 'panel') setPanelOpen(true);
+      else if (target) {
+        setPanelOpen(false);
+        setTab(target);
+      }
+    };
+    void Linking.getInitialURL().then(open);
+    const subscription = Linking.addEventListener('url', ({ url }) => open(url));
     return () => subscription.remove();
   }, []);
 
   useEffect(() => {
-    // Async: loads the MiniLM model + precomputes anchor embeddings. Falls back
-    // to the heuristic scorer until (or unless) this resolves successfully.
-    // In __DEV__ this also runs and logs the embedding sanity check (HANDOFF step 3).
+    // Async: loads the MiniLM model + precomputes anchor embeddings. Until (or
+    // unless) this succeeds, task types come from title keywords alone.
+    // In __DEV__ this also runs and logs the embedding sanity check.
     void initPriorityScorer().then((ready) => {
       if (!ready) {
         console.warn('[priority] running on heuristic fallback — model failed to load');
         return;
       }
-      // HANDOFF step 3: the on-device go/no-go for the community model conversion.
+      // Dev-only go/no-go for the community model conversion: logs whether the embeddings are sane.
       if (__DEV__) {
         const report = verifyEmbeddingSanity();
         console.log(

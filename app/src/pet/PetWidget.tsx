@@ -1,5 +1,4 @@
-// Owner: Person C
-// Cling — the app's mascot. Contract: see CONTRACT.md section 4.
+// Cling — the app's mascot.
 
 import { useState } from 'react';
 import { Pressable } from 'react-native';
@@ -25,7 +24,7 @@ const MOOD_ANIMATION: Record<ClingMood, ClingAnimationName> = {
 
 // PetWidget is the mood-driven mascot visual: it loops the animation for the
 // current mood, and plays a one-shot "poke" reaction on tap before calling
-// onPress (navigates into the app per CONTRACT.md).
+// onPress (opens the Cling panel).
 export function PetWidget({ mood, onPress, scale = 1, flipX = false }: ClingWidgetProps) {
   const [poking, setPoking] = useState(false);
 

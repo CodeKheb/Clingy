@@ -1,12 +1,9 @@
-// Owner: Person C (per CONTRACT.md section 4: "Person B or C can compute this,
-// agree on who owns the aggregation function when wiring it up" — Person C owns it).
-//
 // Derives Cling's mood from the aggregate urgencyScore across upcoming
 // assignments. Takes already-scored items (PriorityOutput, i.e. whatever
 // scorePriority() returned) rather than re-scoring, so it works the same
 // whether the caller reads from the classroom fixture today or SQLite's
-// `assignments` table once Person B's sync pipeline is wired up — the
-// shape (urgency_score REAL) matches CONTRACT.md section 2 either way.
+// `assignments` table once the sync pipeline is wired up — the
+// shape (urgency_score REAL) matches the assignments table either way.
 
 import type { PriorityOutput } from '../priority';
 import type { ClingMood } from './PetWidget';

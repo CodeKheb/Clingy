@@ -1,4 +1,4 @@
-// Owner: Person C — BERT-style WordPiece tokenizer for the bundled MiniLM TFLite model.
+// BERT-style WordPiece tokenizer for the bundled MiniLM TFLite model.
 // Hand-rolled (no RN-compatible maintained tokenizer package exists for this) against
 // assets/models/tokenizer/vocab.txt, matching BertTokenizer(do_lower_case=true) behavior.
 

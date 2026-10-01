@@ -1,5 +1,5 @@
 // Design tokens — the single source of truth for the app's Material You dark
-// theme (see DESIGN.md). Screens and shared components import `C` instead of
+// theme. Screens and shared components import `C` instead of
 // hardcoding hex strings, so every screen stays visually consistent.
 
 export const C = {

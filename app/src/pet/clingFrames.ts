@@ -1,4 +1,4 @@
-// Owner: Person C — frame assets cropped from assets/sprite_sheet.png into assets/cling/*.png
+// Frame assets cropped from assets/source/sprite_sheet.png into assets/cling/*.png
 // Every frame (across all animations) is cropped to the same native canvas size
 // so swapping frames or animations never jumps or resizes the sprite.
 

@@ -1,4 +1,4 @@
-// Owner: Person C — wires moodAggregation.ts up to real data for the app shell.
+// Wires moodAggregation.ts up to real data for the app shell.
 //
 // syncService.ts computes mood (via moodFromScores) and persists it to
 // SQLite's pet_state row on every sync; this hook just reads that back and

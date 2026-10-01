@@ -1,4 +1,4 @@
-// Owner: Person C — the conversational panel opened by tapping the Cling
+// The conversational panel opened by tapping the Cling
 // overlay bubble (or the in-app floating fallback). No free text input from
 // the user: Cling "says" a line, the user taps one of a few canned replies.
 

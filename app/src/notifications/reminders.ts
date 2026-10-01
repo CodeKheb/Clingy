@@ -1,4 +1,4 @@
-// Owner: Person B — expo-notifications scheduled from SQLite deadlines.
+// Expo-notifications scheduled from SQLite deadlines.
 //
 // Local (device-only) notifications, no push/server round-trip: one for each
 // upcoming assignment's due date, one for each proposed study block's start

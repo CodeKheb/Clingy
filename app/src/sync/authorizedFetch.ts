@@ -26,7 +26,7 @@ export async function authorizedFetch(path: string, init: RequestInit = {}): Pro
 
   let response = await call(tokens.accessToken);
 
-  // Access tokens expire; retry once after a refresh (CONTRACT.md /auth/refresh).
+  // Access tokens expire; retry once after a refresh (backend POST /auth/refresh).
   if (response.status === 401 && tokens.refreshToken) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {

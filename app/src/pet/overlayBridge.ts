@@ -1,4 +1,4 @@
-// Owner: Person C — thin wrapper over the native ClingOverlay module
+// Thin wrapper over the native ClingOverlay module
 // (plugins/overlay/native/OverlayModule.kt). Android only; the system-wide
 // bubble has no iOS/web equivalent in this app.
 

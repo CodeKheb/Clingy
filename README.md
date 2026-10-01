@@ -1,60 +1,99 @@
-# Clingy
+<p align="center">
+  <img src="docs/images/icon.png" width="96" alt="Clingy icon: Cling, a smiling orange star">
+</p>
 
-A privacy-first Android app that syncs Google Classroom assignments and Google Calendar events, works fully offline once synced, and uses an on-device prioritization model plus **Cling** — a floating pet mascot — to remind you of deadlines and suggest how to spend your time.
+<h1 align="center">Clingy</h1>
 
-## Stack
+<p align="center">
+  Your Google Classroom deadlines, turned into a study plan.<br>
+  An Android app that works offline, with a small star called <b>Cling</b> that nudges you.
+</p>
 
-- **App**: React Native (Expo, dev client), Android target, `expo-sqlite` for local storage
-- **Backend**: Node.js (Express) — handles Google OAuth2 and proxies Classroom/Calendar APIs only; no business-logic database
+<p align="center">
+  <img src="docs/images/home.png" width="230" alt="Home screen">
+  &nbsp;
+  <img src="docs/images/schedule.png" width="230" alt="Schedule screen">
+  &nbsp;
+  <img src="docs/images/chat.png" width="230" alt="Chat with Cling">
+</p>
 
-## Repo layout
+## What it does
 
-```
-/backend   Node/Express OAuth + Classroom/Calendar proxy  (owner: Person A)
-/app       Expo React Native app                          (owners: Person B, Person C)
-CONTRACT.md  Shared schema/API/interface contract — read this before writing integration code
-TASKS.md     Live checklist of what's done / in progress, split by owner
-```
+- **Reads your Classroom and Calendar.** Sign in with Google and your assignments and events come in.
+- **Decides what's urgent.** Each assignment is scored on its due date, what's riding on it and how much work it needs. A small language model running on the phone helps tell an exam from a worksheet.
+- **Plans your study time.** Work is split into sessions of about an hour and fitted around your calendar. Drag a session to a new time and the rest of the plan rearranges itself. Say you're busy and it plans around that. Mark a session done and the plan shrinks.
+- **Keeps your Google Calendar in step.** Study sessions can appear on your calendar too (switchable in Settings).
+- **Reminds you.** A day before, two hours before and at each deadline, plus a nudge when a session starts.
+- **Works offline.** Everything is stored on the phone; it only goes online to sign in and sync.
+- **Cling.** A star that floats over your other apps (drag it to the ✕ to send it away), plus a chat where you can ask what's next.
 
-## Team split
+How all of that fits together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-| Person | Owns | Key paths |
-|---|---|---|
-| **A** | Backend + Google OAuth | `/backend`, `app/src/auth/` |
-| **B** | App core: data, sync, scheduling, notifications | `app/src/db/`, `app/src/sync/`, `app/src/scheduling/`, `app/src/notifications/` |
-| **C** | On-device prioritization model + pet widget | `app/src/priority/`, `app/src/pet/` |
+## Get it
 
-Full plan, architecture, and rationale: see the plan doc shared with the team (`make-a-plan-we-re-tingly-crayon.md`).
+Releases are published as GitHub Releases and on the project's download page (`site/`). The APK is for 64-bit Android phones; open it and allow installs from the source when Android asks.
 
-## Getting started
+Google only lets listed test users sign in until the app's consent screen is verified, so add anyone who needs to sign in as a test user in Google Cloud Console.
 
-### Backend (Person A)
+## Run it from source
+
+You need Node 22, JDK 21 (newer JDKs trip the Android build), the Android SDK, and an Android phone with USB debugging.
+
+**1. Backend** (a small Express app; see [why it exists](ARCHITECTURE.md#why-there-is-a-backend-at-all))
+
 ```bash
 cd backend
 npm install
-cp .env.example .env   # fill in Google OAuth client id/secret
-npm run dev
+cp .env.example .env     # add your Google OAuth client id and secret
+npm run dev              # http://localhost:4000
 ```
 
-### App (Person B / C)
+The Google OAuth client needs `http://localhost:4000/auth/google/callback` (or your deployed address) as an authorized redirect URI, and the Classroom and Calendar APIs enabled.
+
+**2. App**
+
 ```bash
 cd app
 npm install
-npx expo prebuild       # only needed once native modules (overlay, tflite) are added
-npx expo run:android
+cp .env.example .env     # point EXPO_PUBLIC_BACKEND_URL at your backend
+npx expo prebuild --platform android
+cd android && ./gradlew installDebug && cd ..
+npx expo start --dev-client
 ```
 
-## Branching workflow
+Android's `adb reverse tcp:8081 tcp:8081` lets the phone reach the dev server over USB. `android/` is generated, not committed; rerun `prebuild` after changing a native module or the plugin in `app/plugins/overlay`.
 
-- `main` stays always-demoable.
-- Each person works on their own branch: `feat/backend-auth`, `feat/app-core`, `feat/ml-pet`.
-- Merge to `main` at the agreed integration checkpoints (hour 1, midpoint, final pass) — not continuously.
-- Before merging to `main`, run the relevant quick check from the plan's Verification section.
+**3. Checks**
 
-## Demo script
+```bash
+cd app && npx tsc --noEmit && npx expo lint
+cd ../backend && npx tsc --noEmit
+```
 
-1. Fresh login via Google OAuth.
-2. Sync Classroom + Calendar data.
-3. Turn off network — show deadline list still renders, sorted by urgency, with suggested time blocks.
-4. Show a deadline reminder notification firing.
-5. Tap Cling — app opens to the relevant screen.
+## Project layout
+
+```
+app/                     Expo / React Native app
+  src/screens/           Home, Schedule, chat, login, drag-to-arrange
+  src/priority/          task type, effort and urgency; the on-device model
+  src/scheduling/        the study-session planner
+  src/sync/              Classroom/Calendar sync, background sync, calendar push
+  src/db/                SQLite schema and queries
+  src/pet/               Cling: sprite, mood, chat script, overlay bridge
+  plugins/overlay/       Expo config plugin + Kotlin: floating Cling, model asset
+backend/                 Express: Google OAuth, Classroom and Calendar proxy
+site/                    Download page and two Vercel functions (releases, download)
+.github/workflows/       Builds and publishes the APK when a v* tag is pushed
+```
+
+## Deploying
+
+- **Backend:** a Vercel project with root directory `backend`. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI` (your `/auth/google/callback` address).
+- **Download page:** a Vercel project with root directory `site`. Set `GITHUB_TOKEN` to a read-only fine-grained token for this repository, because the repository is private.
+- **A release:** `git tag v1.0.1 && git push origin v1.0.1`. GitHub Actions builds the APK and attaches it to a new release, and the download page picks it up.
+
+## Notes
+
+- Android only. The floating Cling uses Android's "display over other apps".
+- The release APK is signed with the Expo template's debug key, which is fine for sideloading but not for a store listing.
+- There are no automated tests yet. `ARCHITECTURE.md` lists the other known limitations.

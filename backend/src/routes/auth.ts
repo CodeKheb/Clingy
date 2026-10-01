@@ -3,7 +3,6 @@ import { createOAuthClient, OAUTH_SCOPES } from "../services/googleClient";
 
 export const authRouter = Router();
 
-// TODO(Person A): wire up real OAuth flow.
 authRouter.get("/google/url", (req, res) => {
   const client = createOAuthClient();
   // The app passes its deep-link redirect (e.g. clingy://auth-callback) so the

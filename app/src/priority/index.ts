@@ -1,5 +1,3 @@
-// Owner: Person C
-// Contract: see CONTRACT.md section 3. Person B calls scorePriority() after sync.
 //
 // What the on-device model does here: when the keywords in a title/description
 // can't tell what kind of work it is (exam, project, writing, ...), MiniLM

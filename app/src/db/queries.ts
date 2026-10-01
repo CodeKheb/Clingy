@@ -1,4 +1,4 @@
-// Owner: Person B — CRUD/upsert helpers against the SQLite schema in schema.ts.
+// CRUD/upsert helpers against the SQLite schema in schema.ts.
 
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { db as defaultDb, ensureSchema, schemaReady } from './schema';

@@ -18,7 +18,6 @@ async function pick(
   ToastAndroid.show(hint, ToastAndroid.SHORT);
   return new Promise((resolve) => {
     const finish = (result: Date | typeof CHOOSE_TIMES | null) => {
-      console.log(`[picker] ${mode} dialog result:`, result instanceof Date ? result.toISOString() : String(result));
       resolve(result);
     };
     try {

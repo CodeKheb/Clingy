@@ -1,5 +1,4 @@
-// Owner: Person B
-// Fetches from the backend (CONTRACT.md API shapes), calls priority.scorePriority()
+// Fetches from the backend (shapes in src/types.ts), calls priority.scorePriority()
 // for each assignment, and upserts everything into SQLite (schema.ts).
 
 import { authorizedFetch } from './authorizedFetch';
@@ -34,7 +33,7 @@ export type SyncResult =
 /**
  * Fetches coursework + calendar events from the backend, scores each
  * assignment, upserts everything into SQLite, and persists Cling's mood
- * from the aggregate urgency — the full CONTRACT.md data pipeline in one
+ * from the aggregate urgency — the whole data pipeline in one
  * call. Call this after sign-in and on whatever interval backgroundSync.ts
  * decides.
  */

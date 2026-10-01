@@ -12,7 +12,7 @@ import {
 
 export const calendarRouter = Router();
 
-// TODO(Person A): replace header-based token passthrough with real session lookup.
+// Stateless by design: the app sends its Google access token on every request and nothing is stored server-side.
 calendarRouter.get("/events", async (req, res) => {
   const accessToken = req.headers.authorization?.replace("Bearer ", "");
   if (!accessToken) {

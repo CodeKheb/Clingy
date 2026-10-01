@@ -1,13 +1,13 @@
-// Owner: Person C — TFLite-backed implementation of scorePriority() (CONTRACT.md section 3).
+// TFLite-backed implementation of scorePriority() (see src/priority/index.ts).
 // Runs the bundled all-MiniLM-L6-v2 quantized model fully on-device and turns
 // embeddings into urgency scores via cosine similarity against "urgency anchor"
 // phrases, combined with days-until-due math.
 //
 // Usage:
 //   await initPriorityScorer()   // once at app start (async: model load + anchor embeddings)
-//   scorePriority(input)         // then fully synchronous, per CONTRACT.md
+//   scorePriority(input)         // then fully synchronous
 //
-// IMPORTANT (from HANDOFF.md flatbuffer analysis): this model's tensor names are
+// IMPORTANT (from analysing the model's flatbuffer): this model's tensor names are
 // ambiguous (`inputs`/`inputs_1` — NOT `input_ids`/`attention_mask`). Tensor index 0
 // feeds a GATHER op (input_ids), index 1 feeds SHAPE/EXPAND_DIMS/RESHAPE
 // (attention_mask). Getting this backwards silently produces garbage embeddings,
@@ -23,7 +23,7 @@ import type { TaskType } from './taskProfile';
 
 const EMBED_DIM = 384; // all-MiniLM-L6-v2 output dimension
 
-// Per-HANDOFF flatbuffer trace: signature `inputs_1` → tensor 0 → GATHER = input_ids,
+// From tracing the model's flatbuffer: signature `inputs_1` → tensor 0 → GATHER = input_ids,
 // signature `inputs` → tensor 1 → RESHAPE = attention_mask. Used as the tie-breaker
 // default if the empirical probe below can't separate the two orderings.
 const TRACED_IDS_INDEX = 0;
@@ -253,7 +253,7 @@ async function resolveInputOrder(
   return { idsIndex: 0, maskIndex: 1, how: 'probed' };
 }
 
-// --- Sanity verification (HANDOFF step 3: the real go/no-go) -----------------
+// --- Sanity verification (the real go/no-go for the community model) -----------------
 
 export type SanityReport = {
   ok: boolean;
@@ -263,7 +263,7 @@ export type SanityReport = {
 };
 
 /**
- * Verifies the embedding is sane before anything builds on it (HANDOFF step 3):
+ * Verifies the embedding is sane before anything builds on it:
  * two near-duplicate sentences must embed closely, two unrelated ones must not.
  * Run on-device after initPriorityScorer() — pass criteria are loose enough to
  * tolerate model quirks but tight enough to catch a broken conversion or a
@@ -303,4 +303,4 @@ export function classifyTypeTflite(title: string, description: string | null): T
   return best && best.sim >= TYPE_MATCH_THRESHOLD ? best.type : null;
 }
 
-// --- CONTRACT.md interface ---------------------------------------------------
+// --- Public interface ---------------------------------------------------

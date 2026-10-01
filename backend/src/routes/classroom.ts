@@ -5,7 +5,7 @@ import type { CourseworkResponse } from "../types";
 
 export const classroomRouter = Router();
 
-// TODO(Person A): replace header-based token passthrough with real session lookup.
+// Stateless by design: the app sends its Google access token on every request and nothing is stored server-side.
 classroomRouter.get("/coursework", async (req, res) => {
   const accessToken = req.headers.authorization?.replace("Bearer ", "");
   if (!accessToken) {

@@ -1,4 +1,4 @@
-// Owner: Person C — the scripted conversation tree for the Cling panel.
+// The scripted conversation tree for the Cling panel.
 // No free text from the user: every turn is Cling "saying" something plus a
 // small set of tappable replies, like the sprite sheet's chat-bubble
 // interaction example (idle -> tap -> "Hey! What can I help with?" with
