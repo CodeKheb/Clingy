@@ -5,7 +5,13 @@
 // canned options).
 
 import { getUpcomingAssignments } from '../db/queries';
-import { buildProposedSchedule, commitProposedSchedule, type ProposedBlock } from '../scheduling/scheduler';
+import {
+  buildProposedSchedule,
+  commitProposedSchedule,
+  markUnavailableAndReschedule,
+  type ProposedBlock,
+} from '../scheduling/scheduler';
+import { pickBusyRange } from '../screens/utils/pickDateTime';
 
 export type ConversationOption = {
   label: string;
@@ -28,6 +34,23 @@ export const CONVERSATION: Record<string, ConversationNode> = {
       { label: 'Show my tasks', next: 'show_tasks' },
       { label: 'I need to study', next: 'offer_schedule' },
       { label: "What's next?", next: 'whats_next' },
+      { label: "I'm busy at a certain time", next: 'busy_intro' },
+    ],
+  },
+  busy_intro: {
+    id: 'busy_intro',
+    clingSays: "Tell me when you can't study and I'll move your sessions around it.",
+    options: [
+      { label: 'Pick the day and time', next: 'busy_done' },
+      { label: 'Back', next: 'root' },
+    ],
+  },
+  busy_done: {
+    id: 'busy_done',
+    clingSays: "Done! I've moved your study sessions around that time.", // replaced if the picker is dismissed, see resolveNodeEffects
+    options: [
+      { label: 'Another time', next: 'busy_done' },
+      { label: 'Thanks!', next: 'root' },
     ],
   },
   show_tasks: {
@@ -69,6 +92,8 @@ export const CONVERSATION: Record<string, ConversationNode> = {
 export type ConversationSideEffectResult = {
   assignmentSummary?: string[];
   proposedBlocks?: ProposedBlock[];
+  /** Replaces the node's static line when what happened differs from the happy path. */
+  clingSaysOverride?: string;
 };
 
 /**
@@ -91,6 +116,16 @@ export async function resolveNodeEffects(nodeId: string): Promise<ConversationSi
     const blocks = await buildProposedSchedule();
     await commitProposedSchedule(blocks);
     return { proposedBlocks: blocks };
+  }
+
+  if (nodeId === 'busy_done') {
+    const range = await pickBusyRange();
+    if (!range) return { clingSaysOverride: 'No problem, I left your schedule as it was.' };
+    if (range.end <= range.start) {
+      return { clingSaysOverride: 'That end time is before the start, so I left your schedule as it was.' };
+    }
+    await markUnavailableAndReschedule(range.start.toISOString(), range.end.toISOString());
+    return {};
   }
 
   return {};

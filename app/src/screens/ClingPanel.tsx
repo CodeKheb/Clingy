@@ -50,7 +50,7 @@ export function ClingPanel({ onClose }: ClingPanelProps) {
       const extra = await resolveNodeEffects(resolvedId);
       if (cancelled) return;
       const node = CONVERSATION[resolvedId];
-      setHistory((prev) => [...prev, { role: 'cling', clingSays: node.clingSays, extra }]);
+      setHistory((prev) => [...prev, { role: 'cling', clingSays: extra.clingSaysOverride ?? node.clingSays, extra }]);
       if (resolvedId !== nodeId) {
         setNodeId(resolvedId);
       } else {

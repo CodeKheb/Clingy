@@ -12,6 +12,9 @@ authRouter.get("/google/url", (req, res) => {
   const appRedirectUri = req.query.appRedirectUri as string | undefined;
   const url = client.generateAuthUrl({
     access_type: "offline",
+    // Google only returns a refresh token on the first consent unless asked again;
+    // without this, a repeat sign-in leaves the app unable to refresh after an hour.
+    prompt: "consent",
     scope: OAUTH_SCOPES,
     state: appRedirectUri ? encodeURIComponent(appRedirectUri) : undefined,
   });

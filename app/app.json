@@ -28,7 +28,8 @@
       "expo-web-browser",
       "expo-secure-store",
       "./plugins/overlay",
-      "expo-background-task"
+      "expo-background-task",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

@@ -24,6 +24,7 @@ import {
 import { schemaReady } from '../db/schema';
 import { buildProposedSchedule, commitProposedSchedule, markUnavailableAndReschedule } from '../scheduling/scheduler';
 import { sessionLabels, type TaskType } from '../priority/taskProfile';
+import { pickBusyRange } from './utils/pickDateTime';
 import { C, urgencyColor, urgencyLabel } from './utils/theme';
 import {
   dayLabel,
@@ -56,6 +57,7 @@ function PlanSummaryCard({
   plannedMinutes,
   nextLabel,
   onRerun,
+  onBusy,
   rerunning,
   rerunError,
 }: {
@@ -63,6 +65,7 @@ function PlanSummaryCard({
   plannedMinutes: number;
   nextLabel: string | null;
   onRerun: () => void;
+  onBusy: () => void;
   rerunning: boolean;
   rerunError: string | null;
 }) {
@@ -122,6 +125,9 @@ function PlanSummaryCard({
         <Text style={styles.ctaText}>
           {rerunning ? 'Scheduling…' : 'Re-run Scheduler'}
         </Text>
+      </Pressable>
+      <Pressable style={styles.busyButton} onPress={onBusy} disabled={rerunning}>
+        <Text style={styles.busyButtonText}>I&apos;m busy at a certain time…</Text>
       </Pressable>
       {rerunError && <Text style={styles.summaryError}>{rerunError}</Text>}
     </View>
@@ -284,6 +290,25 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
     [loadFromDb],
   );
 
+  const onBusy = useCallback(async () => {
+    const range = await pickBusyRange();
+    if (!range) return;
+    if (range.end <= range.start) {
+      setRerunError('The end time has to be after the start time.');
+      return;
+    }
+    setRerunning(true);
+    setRerunError(null);
+    try {
+      await markUnavailableAndReschedule(range.start.toISOString(), range.end.toISOString());
+      await loadFromDb();
+    } catch (err) {
+      setRerunError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRerunning(false);
+    }
+  }, [loadFromDb]);
+
   const onRerun = useCallback(async () => {
     setRerunning(true);
     setRerunError(null);
@@ -338,6 +363,7 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
           plannedMinutes={plannedMinutes}
           nextLabel={nextLabel}
           onRerun={onRerun}
+          onBusy={onBusy}
           rerunning={rerunning}
           rerunError={rerunError}
         />
@@ -395,6 +421,8 @@ export function ScheduleScreen({ onSelectTab, onSignOut }: ScheduleScreenProps) 
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  busyButton: { alignItems: 'center', marginTop: 10, paddingVertical: 12, borderRadius: 999, borderWidth: 1.5, borderColor: C.primaryContainer },
+  busyButtonText: { fontSize: 14, fontWeight: '600', color: C.primary },
   moveButton: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: C.outlineVariant },
   moveButtonText: { fontSize: 12, fontWeight: '600', color: C.onSurfaceVariant },
   blockSession: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, color: C.secondary, marginBottom: 2 },
