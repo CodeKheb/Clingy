@@ -1,9 +1,10 @@
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ActivityIndicator, StyleSheet, Text, Text, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { schemaReady } from './src/db/schema';
 import { getStoredTokens } from './src/auth/googleAuth';
 import { initPriorityScorer } from './src/priority';
 import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
@@ -86,7 +87,7 @@ function AppContent() {
         const report = verifyEmbeddingSanity();
         console.log(
           `[priority] sanity ${report.ok ? 'PASS' : 'FAIL'} — similar=${report.similarPairSimilarity.toFixed(3)} ` +
-            `different=${report.differentPairSimilarity.toFixed(3)} order=${report.inputOrder}`
+          `different=${report.differentPairSimilarity.toFixed(3)} order=${report.inputOrder}`
         );
       }
     });
@@ -96,35 +97,38 @@ function AppContent() {
     return <View style={[styles.container, { paddingTop: insets.top }]} />;
   }
 
+  const [databaseStatus, setDatabaseStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let mounted = true;
+    schemaReady.then(
+      () => mounted && setDatabaseStatus('ready'),
+      (error) => {
+        console.error('Failed to initialize the local database:', error);
+        if (mounted) setDatabaseStatus('error');
+      },
+    );
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (databaseStatus !== 'ready') {
+    return (
+      <View style={styles.container}>
+        {databaseStatus === 'loading' ? (
+          <ActivityIndicator accessibilityLabel="Preparing local database" />
+        ) : (
+          <Text>Could not prepare local data. Please restart the app.</Text>
+        )}
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {panelOpen ? (
-        <ClingPanel onClose={() => setPanelOpen(false)} />
-      ) : signedIn ? (
-        <>
-          <View style={styles.tabBar}>
-            <Pressable style={styles.tabButton} onPress={() => setTab('home')}>
-              <Text style={[styles.tabLabel, tab === 'home' && styles.tabLabelActive]}>Home</Text>
-            </Pressable>
-            <Pressable style={styles.tabButton} onPress={() => setTab('schedule')}>
-              <Text style={[styles.tabLabel, tab === 'schedule' && styles.tabLabelActive]}>Schedule</Text>
-            </Pressable>
-          </View>
-          <View style={{ flex: 1, paddingBottom: insets.bottom }}>
-            {tab === 'home' ? <HomeScreen /> : <ScheduleScreen />}
-          </View>
-        </>
-      ) : (
-        <LoginScreen
-          onSignedIn={() => {
-            setSignedIn(true);
-            void syncNow();
-          }}
-        />
-      )}
-      {!panelOpen && (
-        <PetFloatingFallback mood={mood} onPress={() => setPanelOpen(true)} bottomInset={insets.bottom} />
-      )}
+    <View style={styles.container}>
+      <PetScreen />
+      <PetFloatingFallback mood={mood} onPress={() => {}} />
       <StatusBar style="auto" />
     </View>
   );
