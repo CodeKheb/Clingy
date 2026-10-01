@@ -481,6 +481,24 @@ export async function getAllScheduleBlocks(database?: SQLiteDatabase): Promise<S
   );
 }
 
+export type ScheduleBlockWithAssignment = ScheduleBlock & { assignment_title: string };
+
+export async function getUpcomingScheduleBlocks(
+  nowIso: string = new Date().toISOString(),
+  database?: SQLiteDatabase
+): Promise<ScheduleBlockWithAssignment[]> {
+  const db = await getDb(database);
+  return await db.getAllAsync<ScheduleBlockWithAssignment>(
+    `SELECT schedule_blocks.*, assignments.title AS assignment_title,
+       (SELECT vector FROM embeddings WHERE entity_type = 'schedule_block' AND entity_id = schedule_blocks.id ORDER BY created_at DESC LIMIT 1) AS embedding
+     FROM schedule_blocks
+     JOIN assignments ON assignments.id = schedule_blocks.assignment_id
+     WHERE schedule_blocks.end_at >= ?
+     ORDER BY schedule_blocks.start_at ASC;`,
+    nowIso
+  );
+}
+
 export async function getScheduleBlockById(id: string, database?: SQLiteDatabase): Promise<ScheduleBlock | null> {
   const db = await getDb(database);
   return await db.getFirstAsync<ScheduleBlock>(

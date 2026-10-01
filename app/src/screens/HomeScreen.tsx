@@ -3,15 +3,27 @@
 // pull_to_refresh calls syncNow(), list renders getUpcomingAssignments().
 
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, Text, View } from 'react-native';
+import { Button, FlatList, RefreshControl, Text, View } from 'react-native';
 
 import { type Assignment, getUpcomingAssignments } from '../db/queries';
+import { canDrawOverlays, isOverlaySupported, requestOverlayPermission, startOverlay } from '../pet/overlayBridge';
 import { syncNow } from '../sync/syncService';
 
 export function HomeScreen() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overlayActive, setOverlayActive] = useState(false);
+
+  const handleEnableOverlay = useCallback(async () => {
+    const granted = await canDrawOverlays();
+    if (!granted) {
+      requestOverlayPermission();
+      return; // user must flip the Settings toggle and come back to tap again
+    }
+    const started = await startOverlay();
+    setOverlayActive(started);
+  }, []);
 
   const loadFromDb = useCallback(async () => {
     setAssignments(await getUpcomingAssignments());
@@ -39,6 +51,15 @@ export function HomeScreen() {
   return (
     <View style={{ flex: 1 }}>
       {error && <Text style={{ color: 'red', padding: 8 }}>{error}</Text>}
+      {isOverlaySupported && (
+        <View style={{ padding: 12 }}>
+          <Button
+            title={overlayActive ? 'Overlay running' : 'Enable floating Cling widget'}
+            onPress={handleEnableOverlay}
+            disabled={overlayActive}
+          />
+        </View>
+      )}
       <FlatList
         style={{ flex: 1 }}
         data={assignments}

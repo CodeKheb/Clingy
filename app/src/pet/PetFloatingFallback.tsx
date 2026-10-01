@@ -13,6 +13,8 @@ export type PetFloatingFallbackProps = {
   onPress: () => void;
   /** Vertical position (in px from the top) Cling starts docked at. */
   initialTop?: number;
+  /** Safe-area inset so Cling can't be dragged under a bottom nav bar/home indicator. */
+  bottomInset?: number;
 };
 
 // Floating bubble renders smaller than the full-size PetScreen display.
@@ -21,13 +23,14 @@ const WIDGET_WIDTH = CLING_NATIVE_WIDTH * FLOATING_SCALE;
 const WIDGET_HEIGHT = CLING_NATIVE_HEIGHT * FLOATING_SCALE;
 const EDGE_MARGIN = -WIDGET_WIDTH * 0.32; // Cling sits just off-screen, its hand touching the edge
 
-export function PetFloatingFallback({ mood, onPress, initialTop }: PetFloatingFallbackProps) {
+export function PetFloatingFallback({ mood, onPress, initialTop, bottomInset = 0 }: PetFloatingFallbackProps) {
   const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const maxTop = screenHeight - WIDGET_HEIGHT - bottomInset;
   const [dockedRight, setDockedRight] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [snapping, setSnapping] = useState(false);
 
-  const startTop = initialTop ?? screenHeight * 0.4;
+  const startTop = Math.min(initialTop ?? screenHeight * 0.4, maxTop);
   const [pan] = useState(() => new Animated.ValueXY({ x: 0, y: startTop }));
   // Mutable box holding the last docked Y, updated via functional setState so
   // the PanResponder closure (created once) always sees the latest value
@@ -63,7 +66,7 @@ export function PetFloatingFallback({ mood, onPress, initialTop }: PetFloatingFa
         setDockedRight(draggedToRight);
 
         const releasedY = dockedYBox.current + gesture.dy;
-        const clampedY = Math.max(0, Math.min(screenHeight - WIDGET_HEIGHT, releasedY));
+        const clampedY = Math.max(0, Math.min(maxTop, releasedY));
         dockedYBox.current = clampedY;
 
         Animated.spring(pan, {
