@@ -19,13 +19,18 @@ authRouter.get("/google/callback", async (req, res) => {
     res.status(400).json({ error: "missing code" });
     return;
   }
-  const client = createOAuthClient();
-  const { tokens } = await client.getToken(code);
-  res.json({
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-  });
+  try {
+    const client = createOAuthClient();
+    const { tokens } = await client.getToken(code);
+    res.json({
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+    });
+  } catch (error: any) {
+    console.error("Error exchanging code for tokens:", error?.message || error);
+    res.status(400).json({ error: "Failed to exchange auth code for tokens" });
+  }
 });
 
 authRouter.post("/refresh", async (req, res) => {
@@ -34,11 +39,16 @@ authRouter.post("/refresh", async (req, res) => {
     res.status(400).json({ error: "missing refreshToken" });
     return;
   }
-  const client = createOAuthClient();
-  client.setCredentials({ refresh_token: refreshToken });
-  const { credentials } = await client.refreshAccessToken();
-  res.json({
-    accessToken: credentials.access_token,
-    expiresAt: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
-  });
+  try {
+    const client = createOAuthClient();
+    client.setCredentials({ refresh_token: refreshToken });
+    const { credentials } = await client.refreshAccessToken();
+    res.json({
+      accessToken: credentials.access_token,
+      expiresAt: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : null,
+    });
+  } catch (error: any) {
+    console.error("Error refreshing token:", error?.message || error);
+    res.status(400).json({ error: "Failed to refresh access token" });
+  }
 });

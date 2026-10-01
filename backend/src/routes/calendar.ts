@@ -13,24 +13,46 @@ calendarRouter.get("/events", async (req, res) => {
     return;
   }
 
-  const client = createOAuthClient();
-  client.setCredentials({ access_token: accessToken });
-  const calendar = google.calendar({ version: "v3", auth: client });
+  try {
+    const client = createOAuthClient();
+    client.setCredentials({ access_token: accessToken });
+    const calendar = google.calendar({ version: "v3", auth: client });
 
-  const events = await calendar.events.list({
-    calendarId: "primary",
-    timeMin: new Date().toISOString(),
-    singleEvents: true,
-    orderBy: "startTime",
-  });
+    // Fetch events from all calendars (not just primary)
+    const calendarList = await calendar.calendarList.list();
+    const calendarIds = (calendarList.data.items ?? []).map((cal) => cal.id!);
 
-  const result: CalendarEventResponse = (events.data.items ?? []).map((event) => ({
-    id: event.id!,
-    title: event.summary ?? "",
-    startAt: event.start?.dateTime ?? event.start?.date ?? "",
-    endAt: event.end?.dateTime ?? event.end?.date ?? "",
-    raw: event,
-  }));
+    const timeMin = new Date().toISOString();
+    const allEvents = await Promise.all(
+      calendarIds.map((calendarId) =>
+        calendar.events.list({
+          calendarId,
+          timeMin,
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 50,
+        }).catch(() => null) // skip calendars we can't read
+      )
+    );
 
-  res.json(result);
+    const result: CalendarEventResponse = allEvents
+      .flatMap((res) => res?.data.items ?? [])
+      .sort((a, b) => {
+        const aTime = a.start?.dateTime ?? a.start?.date ?? "";
+        const bTime = b.start?.dateTime ?? b.start?.date ?? "";
+        return aTime.localeCompare(bTime);
+      })
+      .map((event) => ({
+      id: event.id!,
+      title: event.summary ?? "",
+      startAt: event.start?.dateTime ?? event.start?.date ?? "",
+      endAt: event.end?.dateTime ?? event.end?.date ?? "",
+      raw: event,
+    }));
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error fetching calendar events:", error?.message || error);
+    res.status(error?.code === 401 ? 401 : 500).json({ error: "Failed to fetch events from Google Calendar" });
+  }
 });
