@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clingy — your study buddy</title>
+  <meta name="description" content="Clingy pulls your Google Classroom deadlines, plans your study time, and keeps Cling on your screen to nudge you. Download the Android app.">
+  <meta name="theme-color" content="#0f131c">
+  <link rel="icon" href="favicon.png">
+  <style>
+    :root {
+      --bg: #0f131c; --surface: #181c24; --card: #1c2029; --card-hi: #262a33; --line: #2c3039;
+      --text: #dfe2ef; --muted: #e1bfb5; --primary: #ffb59d; --brand: #ff6b35; --teal: #44e2cd;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow-x: hidden;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+
+    header { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+    .brand img { width: 36px; height: 36px; border-radius: 10px; }
+    header nav { display: flex; gap: 18px; font-size: 14px; }
+
+    .hero { text-align: center; padding: 56px 0 40px; position: relative; }
+    .hero::before {
+      content: ""; position: absolute; left: 50%; top: -60px; width: 520px; height: 520px; transform: translateX(-50%);
+      background: radial-gradient(closest-side, rgba(255,107,53,.22), transparent); z-index: -1;
+    }
+    .pill { display: inline-block; padding: 5px 12px; border-radius: 999px; background: var(--card); color: var(--teal); font-size: 12px; font-weight: 600; }
+    h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.1; margin: 16px auto 14px; max-width: 720px; letter-spacing: -.02em; }
+    h1 em { font-style: normal; color: var(--brand); }
+    .lead { max-width: 560px; margin: 0 auto 28px; color: var(--muted); font-size: 18px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px; padding: 14px 26px; border-radius: 999px; border: 0; cursor: pointer;
+      background: var(--brand); color: #fff; font: 700 16px system-ui, sans-serif;
+    }
+    .btn:hover { filter: brightness(1.08); text-decoration: none; }
+    .btn.ghost { background: transparent; border: 1.5px solid var(--line); color: var(--text); }
+    .btn[aria-disabled="true"] { opacity: .6; pointer-events: none; }
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .cta-note { margin-top: 12px; font-size: 13px; color: var(--muted); opacity: .85; }
+
+    section { padding: 36px 0; }
+    h2 { font-size: 26px; margin: 0 0 18px; letter-spacing: -.01em; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+    .card h3 { margin: 10px 0 6px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+    .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--card-hi); display: grid; place-items: center; font-size: 20px; }
+
+    .release { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px; margin-bottom: 12px; }
+    .release.latest { border-color: rgba(255,107,53,.55); }
+    .release-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .release-title { font-weight: 700; }
+    .tag { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: rgba(255,107,53,.18); color: var(--primary); font-size: 11px; font-weight: 700; vertical-align: 2px; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .notes { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+    .notes.plain { padding-left: 0; list-style: none; }
+    .skeleton { height: 86px; border-radius: 20px; background: linear-gradient(90deg, var(--card), var(--card-hi), var(--card)); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    ol.steps { margin: 0; padding-left: 20px; color: var(--muted); }
+    ol.steps li { margin: 6px 0; }
+    ol.steps b { color: var(--text); }
+    footer { padding: 36px 0 90px; color: var(--muted); font-size: 13px; text-align: center; border-top: 1px solid var(--line); margin-top: 24px; }
+
+    /* Cling */
+    #cling {
+      position: fixed; top: 0; left: 0; width: 84px; height: 90px; z-index: 50; cursor: grab;
+      touch-action: none; user-select: none; -webkit-user-select: none; will-change: transform;
+    }
+    #cling.dragging { cursor: grabbing; }
+    #cling img { width: 100%; height: 100%; display: block; pointer-events: none; image-rendering: pixelated; }
+    #cling img.flip { transform: scaleX(-1); }
+    #bubble {
+      position: fixed; z-index: 49; max-width: 210px; padding: 9px 13px; border-radius: 16px; background: var(--card-hi); color: var(--text);
+      font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none;
+    }
+    #bubble.show { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .skeleton { animation: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="#top"><img src="icon-192.png" alt="">Clingy</a>
+      <nav><a href="#features">Features</a><a href="#releases">Releases</a></nav>
+    </header>
+
+    <main id="top">
+      <div class="hero">
+        <span class="pill">Android · free</span>
+        <h1>Your study buddy that <em>never lets a deadline slip</em></h1>
+        <p class="lead">Clingy reads your Google Classroom, plans your study time around your calendar, and keeps Cling on your screen to nudge you.</p>
+        <div class="cta-row">
+          <a id="download" class="btn" href="#releases" aria-disabled="true">Download for Android</a>
+          <a class="btn ghost" href="#releases">All releases</a>
+        </div>
+        <div class="cta-note" id="download-note">Looking up the latest version…</div>
+      </div>
+
+      <section id="features">
+        <h2>What it does</h2>
+        <div class="grid">
+          <div class="card"><div class="ico">🎯</div><h3>Knows what matters</h3><p>Scores every assignment by deadline, stakes and effort, right on your phone.</p></div>
+          <div class="card"><div class="ico">🗓️</div><h3>Plans your study time</h3><p>Splits work into sessions around your calendar. Drag a session and the rest re-plans itself.</p></div>
+          <div class="card"><div class="ico">📴</div><h3>Works offline</h3><p>Everything is saved on your phone. Your plan and reminders keep working without a signal.</p></div>
+          <div class="card"><div class="ico">⭐</div><h3>Cling is always there</h3><p>A little star floats over your other apps. Tap for a chat, drag it away when you need focus.</p></div>
+        </div>
+      </section>
+
+      <section id="releases">
+        <h2>Releases</h2>
+        <div id="release-list"><div class="skeleton"></div></div>
+      </section>
+
+      <section>
+        <h2>Installing</h2>
+        <ol class="steps">
+          <li><b>Download</b> the APK on your Android phone.</li>
+          <li>Open it. If Android asks, <b>allow installs from this source</b> (Settings → Install unknown apps).</li>
+          <li>Open Clingy and <b>sign in with Google</b> to bring in your Classroom and Calendar.</li>
+        </ol>
+        <p class="meta" style="margin-top:12px">The APK is for 64-bit Android phones (almost all phones from the last several years).</p>
+      </section>
+    </main>
+
+    <footer>Made by students, for students.</footer>
+  </div>
+
+  <div id="bubble" role="status"></div>
+  <div id="cling" role="img" aria-label="Cling the mascot. Drag me around!" tabindex="0"><img id="cling-img" alt="" src="cling/idle_1.png" draggable="false"></div>
+
+<script>
+  const API = '/api/releases'; // our own endpoint; it reads the private GitHub repo server-side
+
+  /* ---------- Releases (the only thing the page fetches) ---------- */
+  const fmtSize = (b) => (b / 1048576).toFixed(0) + ' MB';
+  const fmtDate = (s) => new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+
+  function renderNotes(body) {
+    const lines = (body || '').split('\n').map((l) => l.replace(/^[#>*\-\s]+/, '').trim()).filter(Boolean).slice(0, 6);
+    if (!lines.length) return null;
+    const ul = el('ul', 'notes');
+    lines.forEach((l) => ul.appendChild(el('li', '', l)));
+    return ul;
+  }
+
+  function renderRelease(r, isLatest) {
+    const apk = (r.assets || []).find((a) => a.name.toLowerCase().endsWith('.apk'));
+    const card = el('div', 'release' + (isLatest ? ' latest' : ''));
+    const head = el('div', 'release-head');
+    const title = el('div', 'release-title', r.name || r.tag_name);
+    if (isLatest) title.appendChild(el('span', 'tag', 'Latest'));
+    const meta = el('div', 'meta', fmtDate(r.published_at) + (apk ? ` · ${fmtSize(apk.size)} · ${apk.download_count} downloads` : ''));
+    const left = el('div'); left.append(title, meta);
+    head.appendChild(left);
+    if (apk) {
+      const a = el('a', 'btn' + (isLatest ? '' : ' ghost'), 'Download APK');
+      a.href = '/api/download?id=' + apk.id;
+      head.appendChild(a);
+    }
+    card.appendChild(head);
+    const notes = renderNotes(r.body);
+    if (notes) card.appendChild(notes);
+    return card;
+  }
+
+  async function loadReleases() {
+    const list = document.getElementById('release-list');
+    const btn = document.getElementById('download');
+    const note = document.getElementById('download-note');
+    try {
+      const res = await fetch(API);
+      if (!res.ok) throw new Error('releases answered ' + res.status);
+      const releases = await res.json();
+      list.replaceChildren();
+      if (!releases.length) { list.appendChild(el('p', 'meta', 'No releases yet. Check back soon!')); note.textContent = 'No release yet.'; return; }
+      releases.forEach((r, i) => list.appendChild(renderRelease(r, i === 0)));
+      const apk = (releases[0].assets || []).find((a) => a.name.toLowerCase().endsWith('.apk'));
+      if (apk) {
+        btn.href = '/api/download?id=' + apk.id; btn.removeAttribute('aria-disabled');
+        note.textContent = `${releases[0].tag_name} · ${fmtSize(apk.size)} · released ${fmtDate(releases[0].published_at)}`;
+      } else { note.textContent = 'The latest release has no APK attached yet.'; }
+    } catch (e) {
+      list.replaceChildren();
+      list.appendChild(el('p', 'meta', "Couldn't load releases right now. Please try again in a moment."));
+      note.textContent = 'Releases are temporarily unavailable.';
+    }
+  }
+  loadReleases();
+
+  /* ---------- Cling: animated, draggable, snaps to the nearest edge ---------- */
+  const FRAMES = { idle: 3, drag: 2, snap: 3, poke: 3, happy: 3, reminder: 4 };
+  const DURATION = { idle: 450, drag: 150, snap: 110, poke: 140, happy: 220, reminder: 200 };
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const W = 84, H = 90, HANG = W * 0.32; // hangs 32% off the edge, like in the app
+
+  const cling = document.getElementById('cling');
+  const img = document.getElementById('cling-img');
+  const bubble = document.getElementById('bubble');
+  Object.entries(FRAMES).forEach(([a, n]) => { for (let i = 1; i <= n; i++) new Image().src = `cling/${a}_${i}.png`; });
+
+  let anim = 'idle', frame = 0, timer = null, loop = true, onEnd = null;
+  function play(name, opts = {}) {
+    clearTimeout(timer);
+    anim = name; frame = 0; loop = opts.loop !== false; onEnd = opts.onEnd || null;
+    img.src = `cling/${name}_1.png`;
+    if (reduced && name === 'idle') return;
+    const tick = () => {
+      timer = setTimeout(() => {
+        frame++;
+        if (frame >= FRAMES[anim]) {
+          if (!loop) { frame = FRAMES[anim] - 1; if (onEnd) onEnd(); return; }
+          frame = 0;
+        }
+        img.src = `cling/${anim}_${frame + 1}.png`;
+        tick();
+      }, DURATION[anim]);
+    };
+    tick();
+  }
+  const backToIdle = () => play('idle');
+
+  let x = 0, y = 0, dockedRight = true;
+  const edgeX = (right) => (right ? innerWidth - W + HANG : -HANG);
+  const place = (nx, ny) => { x = nx; y = ny; cling.style.transform = `translate(${x}px, ${y}px)`; };
+  const setFlip = () => img.classList.toggle('flip', !dockedRight);
+  function dock(animated) {
+    const ny = Math.min(Math.max(0, y), innerHeight - H);
+    if (animated) {
+      cling.style.transition = 'transform .28s cubic-bezier(.34,1.56,.64,1)';
+      setTimeout(() => { cling.style.transition = ''; }, 300);
+    }
+    place(edgeX(dockedRight), ny);
+    setFlip();
+  }
+  y = innerHeight * 0.45; dock(false);
+  addEventListener('resize', () => dock(false));
+  play('idle');
+
+  function say(text, ms = 2600) {
+    bubble.textContent = text;
+    const bx = dockedRight ? Math.max(8, x - bubble.offsetWidth - 10) : x + W - HANG + 10;
+    bubble.style.left = Math.min(bx, innerWidth - bubble.offsetWidth - 8) + 'px';
+    bubble.style.top = Math.max(8, y + 10) + 'px';
+    bubble.classList.add('show');
+    clearTimeout(say.t); say.t = setTimeout(() => bubble.classList.remove('show'), ms);
+  }
+  setTimeout(() => say("Psst. You can drag me around!", 4200), 1800);
+
+  let drag = null;
+  cling.addEventListener('pointerdown', (e) => {
+    cling.setPointerCapture(e.pointerId);
+    cling.style.transition = '';
+    drag = { sx: e.clientX, sy: e.clientY, ox: x, oy: y, moved: false };
+  });
+  cling.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) > 6) {
+      drag.moved = true; cling.classList.add('dragging'); bubble.classList.remove('show'); play('drag');
+    }
+    if (drag.moved) place(Math.min(Math.max(-HANG, drag.ox + dx), innerWidth - W + HANG), Math.min(Math.max(0, drag.oy + dy), innerHeight - H));
+  });
+  const release = () => {
+    if (!drag) return;
+    const d = drag; drag = null; cling.classList.remove('dragging');
+    if (!d.moved) { // a tap: poke, then a happy hop and a line
+      play('poke', { loop: false, onEnd: () => play('happy', { loop: false, onEnd: backToIdle }) });
+      say(['Hi! I\'m Cling.', 'Download the app and I\'ll keep your deadlines in check.', 'Try dragging me to the other side!'][Math.floor(Math.random() * 3)]);
+      return;
+    }
+    dockedRight = x + W / 2 > innerWidth / 2; // decide by where it ended up, not by flick direction
+    play('snap', { loop: false, onEnd: backToIdle });
+    dock(true);
+  };
+  cling.addEventListener('pointerup', release);
+  cling.addEventListener('pointercancel', release);
+  cling.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play('poke', { loop: false, onEnd: backToIdle }); say('Hi! I\'m Cling.'); } });
+</script>
+</body>
+</html>
