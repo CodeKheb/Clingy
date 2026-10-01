@@ -3,7 +3,7 @@
 // call signInWithGoogle() and hand the tokens to onSignedIn() on success.
 
 import { useState } from 'react';
-import { Button, Text, View } from 'react-native';
+import { Button, StyleSheet, Text, View } from 'react-native';
 
 import { signInWithGoogle, type StoredTokens } from '../auth/googleAuth';
 
@@ -25,9 +25,17 @@ export function LoginScreen({ onSignedIn }: LoginScreenProps) {
   };
 
   return (
-    <View>
+    <View style={styles.container}>
       <Button title="Sign in with Google" onPress={handlePress} />
       {error && <Text>{error}</Text>}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

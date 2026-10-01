@@ -1,15 +1,23 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { getStoredTokens } from './src/auth/googleAuth';
 import { initPriorityScorer } from './src/priority';
 import { verifyEmbeddingSanity } from './src/priority/tfliteScorer';
 import { PetFloatingFallback } from './src/pet/PetFloatingFallback';
-import { PetScreen } from './src/screens/PetScreen';
 import { useClingMood } from './src/pet/useClingMood';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { syncNow } from './src/sync/syncService';
 
 export default function App() {
   const mood = useClingMood();
+  const [signedIn, setSignedIn] = useState<boolean | null>(null); // null = still checking
+
+  useEffect(() => {
+    void getStoredTokens().then((tokens) => setSignedIn(tokens !== null));
+  }, []);
 
   useEffect(() => {
     // Async: loads the MiniLM model + precomputes anchor embeddings. Falls back
@@ -31,9 +39,22 @@ export default function App() {
     });
   }, []);
 
+  if (signedIn === null) {
+    return <View style={styles.container} />;
+  }
+
   return (
     <View style={styles.container}>
-      <PetScreen />
+      {signedIn ? (
+        <HomeScreen />
+      ) : (
+        <LoginScreen
+          onSignedIn={() => {
+            setSignedIn(true);
+            void syncNow();
+          }}
+        />
+      )}
       <PetFloatingFallback mood={mood} onPress={() => {}} />
       <StatusBar style="auto" />
     </View>
@@ -44,7 +65,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
