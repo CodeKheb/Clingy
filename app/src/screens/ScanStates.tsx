@@ -1,4 +1,4 @@
-// Full-screen states for the COR scan: reading the photo, and a friendly failure.
+// Full-screen states for the schedule scan: reading the photo, and a friendly failure.
 
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -10,7 +10,7 @@ export function ScanLoadingOverlay({ visible }: { visible: boolean }) {
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={() => {}}>
       <View style={styles.scrim}>
         <ClingFace size={72} backgroundColor={C.surfaceContainerHighest} borderColor={C.primary + '4D'} borderWidth={1} />
-        <Text style={styles.title}>Reading your COR...</Text>
+        <Text style={styles.title}>Reading your schedule...</Text>
         <Text style={styles.hint}>This takes a few seconds.</Text>
       </View>
     </Modal>

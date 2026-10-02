@@ -1,4 +1,4 @@
-// Shown after a COR scan: the parsed classes as editable rows. Nothing is saved until "Save all".
+// Shown after a schedule scan: the parsed classes as editable rows. Nothing is saved until "Save all".
 
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,7 +14,7 @@ const daysText = (days: number[]) =>
     .map((d) => d.short)
     .join(' ') || 'No days';
 
-export function CorConfirmModal({
+export function ScanConfirmModal({
   drafts: initialDrafts,
   onSave,
   onClose,

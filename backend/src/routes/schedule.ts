@@ -1,14 +1,14 @@
 import { Router } from "express";
 import { ApiError, GoogleGenAI, Type } from "@google/genai";
 
-export const corRouter = Router();
+export const scheduleRouter = Router();
 
 const MAX_BASE64_CHARS = 4_000_000; // Vercel rejects bodies over ~4.5 MB
 const MAX_CLASSES = 30;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-const PROMPT = `This is a university Certificate of Registration (COR) or an enrolled-subjects table.
-Extract only the class schedule rows: subject code or name, meeting days, start and end time, and room.
+const PROMPT = `This is a photo or screenshot of a class schedule. It can be any format: a university registration form, an enrolled-subjects table, a timetable grid or a plain list of classes.
+Extract only the class meeting rows: subject code or name, meeting days, start and end time, and room.
 - Return days exactly as printed (for example "MWF", "TTh", "Sat"). Do not interpret them.
 - Return times in 24-hour HH:MM. Convert AM/PM.
 - If a subject has several meeting rows (lecture and lab), return each as its own entry.
@@ -81,14 +81,14 @@ async function isValidGoogleToken(accessToken: string): Promise<boolean> {
   }
 }
 
-corRouter.post("/parse", async (req, res) => {
+scheduleRouter.post("/parse", async (req, res) => {
   const accessToken = req.headers.authorization?.replace("Bearer ", "");
   if (!accessToken) {
     res.status(401).json({ error: "missing access token" });
     return;
   }
   if (!process.env.GEMINI_API_KEY) {
-    console.error("[cor] GEMINI_API_KEY is not set");
+    console.error("[schedule] GEMINI_API_KEY is not set");
     res.status(500).json({ error: "Scanning isn't available right now. Add your classes manually." });
     return;
   }
@@ -132,7 +132,7 @@ corRouter.post("/parse", async (req, res) => {
   } catch (error) {
     // Status only: never log the image or what the model said (it holds a student's name and ID).
     const status = error instanceof ApiError ? error.status : 0;
-    console.error("[cor] Gemini call failed, status:", status || "unknown");
+    console.error("[schedule] Gemini call failed, status:", status || "unknown");
     if (status === 429) {
       res.status(429).json({ error: "Cling is busy reading other photos. Try again in a minute." });
     } else if (status === 400) {

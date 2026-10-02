@@ -32,8 +32,8 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Cling uses the camera to read your Certificate of Registration.",
-          "photosPermission": "Cling reads the photo of your Certificate of Registration you choose."
+          "cameraPermission": "Cling uses the camera to read your class schedule.",
+          "photosPermission": "Cling reads the photo of your class schedule that you choose."
         }
       ],
       [

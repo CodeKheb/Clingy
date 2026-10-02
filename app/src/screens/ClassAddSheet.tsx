@@ -1,4 +1,4 @@
-// Bottom sheet behind the camera button: scan a COR photo or add a class by hand.
+// Bottom sheet behind the camera button: scan a photo of your schedule or add a class by hand.
 
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +27,7 @@ export function ClassAddSheet({
     fn();
   };
   const actions: Action[] = [
-    { icon: 'camera-outline', title: 'Take photo', hint: 'Snap your COR and Cling reads the schedule', onPress: run(onCamera) },
+    { icon: 'camera-outline', title: 'Take photo', hint: 'Snap your schedule and Cling reads it', onPress: run(onCamera) },
     { icon: 'images-outline', title: 'Choose from gallery', hint: 'Use a photo or screenshot you already have', onPress: run(onGallery) },
     { icon: 'create-outline', title: 'Add manually', hint: 'Type in a class yourself', onPress: run(onManual) },
   ];

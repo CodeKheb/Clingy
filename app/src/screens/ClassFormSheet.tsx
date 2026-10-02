@@ -1,5 +1,5 @@
 // Add/edit form for a class: subject, meeting days, start/end time, optional room.
-// Shared by the Class tab and the COR confirmation list.
+// Shared by the Class tab and the scan confirmation list.
 
 import { useState } from 'react';
 import {

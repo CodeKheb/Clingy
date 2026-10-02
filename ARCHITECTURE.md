@@ -27,7 +27,7 @@ flowchart LR
   end
 
   G["Google<br/>OAuth, Classroom, Calendar"]
-  GEM["Gemini API<br/>reads COR photos"]
+  GEM["Gemini API<br/>reads schedule photos"]
   GH["GitHub<br/>repo, Actions, Releases"]
 
   Phone -- "access token per request" --> API
@@ -40,13 +40,13 @@ flowchart LR
 | Part | Where | What it is |
 |---|---|---|
 | App | `app/` | Expo SDK 57 / React Native 0.86 / Hermes, TypeScript. Android is the target; the floating overlay is Android-only. |
-| Backend | `backend/` | A small stateless Express app on Vercel. It holds the Google OAuth client secret and the Gemini API key, proxies Classroom and Calendar, and reads COR photos. |
+| Backend | `backend/` | A small stateless Express app on Vercel. It holds the Google OAuth client secret and the Gemini API key, proxies Classroom and Calendar, and reads schedule photos. |
 | Download page | `site/` | Static page plus two Vercel functions that read the private repo's releases. Separate Vercel project (root directory `site`). |
 | Release pipeline | `.github/workflows/release.yml` | Pushing a `v*` tag builds the arm64 APK and publishes a GitHub Release. |
 
 ## Why there is a backend at all
 
-A Google OAuth client secret (and a Gemini API key) cannot live inside an app that people install. So the backend does a few narrow jobs: it exchanges the OAuth code for tokens, forwards Classroom and Calendar calls, and passes a photo of a Certificate of Registration to Gemini. It stores nothing. Every request carries the user's access token, and the phone keeps all the data. (If the backend were lost, the app would keep working on what is already saved; it just couldn't sync.)
+A Google OAuth client secret (and a Gemini API key) cannot live inside an app that people install. So the backend does a few narrow jobs: it exchanges the OAuth code for tokens, forwards Classroom and Calendar calls, and passes a photo of a class schedule to Gemini. It stores nothing. Every request carries the user's access token, and the phone keeps all the data. (If the backend were lost, the app would keep working on what is already saved; it just couldn't sync.)
 
 ## Signing in
 
@@ -130,7 +130,7 @@ SQLite (`src/db/schema.ts`, helpers in `queries.ts`):
 |---|---|
 | `courses`, `assignments`, `events` | What the last sync fetched; assignments carry `urgency_score`, `suggested_minutes` and `task_type` |
 | `schedule_blocks` | The current plan; deleting an assignment cascades to its blocks |
-| `class_meetings` | The weekly class timetable, one row per day a class meets (`day_of_week` 0 = Sunday, `start_minutes`/`end_minutes` after midnight, optional `room`). Entered by hand or from a COR scan |
+| `class_meetings` | The weekly class timetable, one row per day a class meets (`day_of_week` 0 = Sunday, `start_minutes`/`end_minutes` after midnight, optional `room`). Entered by hand or from a schedule scan |
 | `dismissed_assignments` | Ids you dismissed, so a sync doesn't bring them back |
 | `app_meta` | The small key/value state above |
 | `pet_state` | Cling's current mood |
@@ -142,9 +142,9 @@ SQLite (`src/db/schema.ts`, helpers in `queries.ts`):
 - **Google Calendar** (`src/sync/calendarPush.ts`, `backend/src/routes/calendar.ts`): after each reschedule the app sends the study blocks to `POST /calendar/study-blocks`. The backend keeps events carrying a private `clingy` marker in step with them (create, rename, delete) and never touches the user's other events. Those events are filtered out when reading the calendar, so a study block can't block itself. It can be switched off in Settings, which removes them.
 - **Classes on the calendar:** the same push also sends the next four weeks of class meetings to `POST /calendar/classes`, as single events titled "Class: ..." with the room as location. They carry their own private marker (`clingyClass`), so the study-block sync never deletes them, and they are filtered out when the calendar is read back (the scheduler already knows classes, and a deleted class must not linger as busy time).
 
-## Class schedule and COR scan
+## Class schedule and photo scan
 
-The Class tab (`ClassScreen`) lists the timetable by day and reads only SQLite. Classes are added by hand (`ClassFormSheet`) or from a photo of a Certificate of Registration, behind the `COR_SCAN_ENABLED` flag in `src/config.ts`.
+The Class tab (`ClassScreen`) lists the timetable by day and reads only SQLite. Classes are added by hand (`ClassFormSheet`) or from a photo or screenshot of any class schedule (a registration form, a timetable, a plain list), behind the `SCHEDULE_SCAN_ENABLED` flag in `src/config.ts`.
 
 ```mermaid
 sequenceDiagram
@@ -152,7 +152,7 @@ sequenceDiagram
   participant Backend
   participant Gemini
   App->>App: pick photo, resize to 1600px, JPEG 0.7
-  App->>Backend: POST /cor/parse {imageBase64, mimeType} + access token
+  App->>Backend: POST /schedule/parse {imageBase64, mimeType} + access token
   Backend->>Gemini: image + prompt, structured JSON output
   Gemini-->>Backend: {classes: [{subject, days, start, end, room}]}
   Backend-->>App: sanitized classes
@@ -160,7 +160,7 @@ sequenceDiagram
   App->>App: Save all writes class_meetings, rebuilds the plan
 ```
 
-`backend/src/routes/cor.ts` checks the Google token, rejects photos over about 4 MB, calls Gemini (`GEMINI_MODEL`, default `gemini-3.1-flash-lite`) with a response schema, and drops unusable rows (missing subject or time, end not after start, more than 30 rows). The Gemini key lives only in the backend environment (`GEMINI_API_KEY`). The route stores nothing and logs only a status code, since a COR holds a student's name and ID. Day patterns are read in the app (`src/classes/parseDays.ts`); if one can't be read, the confirmation screen makes the student pick the days.
+`backend/src/routes/schedule.ts` (also served at the older `/cor/parse` path for earlier app releases) checks the Google token, rejects photos over about 4 MB, calls Gemini (`GEMINI_MODEL`, default `gemini-3.1-flash-lite`) with a response schema, and drops unusable rows (missing subject or time, end not after start, more than 30 rows). The Gemini key lives only in the backend environment (`GEMINI_API_KEY`). The route stores nothing and logs only a status code, since a COR holds a student's name and ID. Day patterns are read in the app (`src/classes/parseDays.ts`); if one can't be read, the confirmation screen makes the student pick the days.
 
 ## Cling
 
@@ -197,7 +197,7 @@ The native splash (`expo-splash-screen`, configured in `app.json`) shows the Cli
 | Scoring, planning, moving and finishing sessions | Syncing Classroom and Calendar |
 | Reminders and the Cling overlay and chat | Refreshing an expired token |
 | Staying signed in (tokens are in SecureStore) | Pushing study blocks and classes to Google Calendar |
-| Adding, editing and deleting classes by hand | Scanning a COR photo |
+| Adding, editing and deleting classes by hand | Scanning a schedule photo |
 
 ## Download page and releases
 
@@ -233,6 +233,6 @@ The release APK is signed with the standard debug key from the Expo template, wh
 - Classroom's point value is used when the course provides it; otherwise effort comes from the task type alone.
 - Task-type detection is keyword-first, so an oddly worded title (for example an exam-results upload) can be mistyped.
 - Sign-in tokens pass through a deep link, and the APK uses the debug signing key.
-- COR scans depend on photo quality and the model; the student always reviews the parsed list before saving, and day patterns the app can't read must be picked by hand.
+- Schedule scans depend on photo quality and the model; the student always reviews the parsed list before saving, and day patterns the app can't read must be picked by hand.
 - Classes appear on Google Calendar for the next four weeks only, and are refreshed whenever the plan is rebuilt.
 - No automated tests; the scheduler was exercised with throwaway scripts against real data.

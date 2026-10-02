@@ -8,9 +8,9 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, ToastAndroid, View } fr
 import { AppHeader } from '../components/AppHeader';
 import { BottomNav, type NavTab } from '../components/BottomNav';
 import { RescheduleOverlay } from '../components/RescheduleOverlay';
-import { CorScanError, pickCorImage, scanCor, type ScanSource } from '../classes/corScan';
+import { ScheduleScanError, pickScheduleImage, scanSchedule, type ScanSource } from '../classes/scheduleScan';
 import { DAYS, draftToMeetings, formatMinutes, meetingToDraft, type ClassDraft } from '../classes/time';
-import { COR_SCAN_ENABLED } from '../config';
+import { SCHEDULE_SCAN_ENABLED } from '../config';
 import {
   deleteClassMeeting,
   getAllClassMeetings,
@@ -22,7 +22,7 @@ import { schemaReady } from '../db/schema';
 import { rescheduleAfterClassChange } from '../scheduling/scheduler';
 import { ClassAddSheet } from './ClassAddSheet';
 import { ClassFormSheet } from './ClassFormSheet';
-import { CorConfirmModal } from './CorConfirmModal';
+import { ScanConfirmModal } from './ScanConfirmModal';
 import { ScanError, ScanLoadingOverlay } from './ScanStates';
 import { C } from './utils/theme';
 
@@ -107,7 +107,7 @@ export function ClassScreen({
 
   const openAdd = () => setForm({ mode: 'add', draft: newDraft(selectedDow) });
 
-  const onFab = () => (COR_SCAN_ENABLED ? setAddSheetOpen(true) : openAdd());
+  const onFab = () => (SCHEDULE_SCAN_ENABLED ? setAddSheetOpen(true) : openAdd());
 
   const lastSource = useRef<ScanSource>('camera');
   const scanning = useRef(false); // blocks double-taps while a photo is being read
@@ -117,14 +117,14 @@ export function ClassScreen({
     scanning.current = true;
     lastSource.current = source;
     try {
-      const asset = await pickCorImage(source);
+      const asset = await pickScheduleImage(source);
       if (!asset) return;
       setScan({ status: 'loading' });
-      setScan({ status: 'confirm', drafts: await scanCor(asset) });
+      setScan({ status: 'confirm', drafts: await scanSchedule(asset) });
     } catch (err) {
       const message =
-        err instanceof CorScanError ? err.message : "Couldn't read that photo. Try again, or add your classes by hand.";
-      if (!(err instanceof CorScanError)) console.warn('[ClassScreen] COR scan failed:', err instanceof Error ? err.name : 'unknown');
+        err instanceof ScheduleScanError ? err.message : "Couldn't read that photo. Try again, or add your classes by hand.";
+      if (!(err instanceof ScheduleScanError)) console.warn('[ClassScreen] schedule scan failed:', err instanceof Error ? err.name : 'unknown');
       setScan({ status: 'error', message });
     } finally {
       scanning.current = false;
@@ -154,8 +154,8 @@ export function ClassScreen({
             <Text style={styles.emptyTitle}>{meetings.length === 0 ? 'No classes yet' : 'Nothing on this day'}</Text>
             <Text style={styles.emptyText}>
               {meetings.length === 0
-                ? COR_SCAN_ENABLED
-                  ? 'Snap your COR or add one by hand.'
+                ? SCHEDULE_SCAN_ENABLED
+                  ? 'Snap your schedule or add classes by hand.'
                   : 'Add your classes by hand and Cling will plan around them.'
                 : 'Free day. Tap the button to add a class.'}
             </Text>
@@ -188,8 +188,8 @@ export function ClassScreen({
         )}
       </ScrollView>
 
-      <Pressable style={styles.fab} onPress={onFab} accessibilityLabel={COR_SCAN_ENABLED ? 'Add classes' : 'Add a class'}>
-        <Ionicons name={COR_SCAN_ENABLED ? 'camera' : 'add'} size={26} color={C.white} />
+      <Pressable style={styles.fab} onPress={onFab} accessibilityLabel={SCHEDULE_SCAN_ENABLED ? 'Add classes' : 'Add a class'}>
+        <Ionicons name={SCHEDULE_SCAN_ENABLED ? 'camera' : 'add'} size={26} color={C.white} />
       </Pressable>
 
       <BottomNav active="Class" onSelectTab={onSelectTab} />
@@ -227,7 +227,7 @@ export function ClassScreen({
         }}
       />
       {scan.status === 'confirm' ? (
-        <CorConfirmModal
+        <ScanConfirmModal
           drafts={scan.drafts}
           onClose={() => setScan({ status: 'idle' })}
           onSave={(drafts) => {
