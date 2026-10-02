@@ -46,11 +46,11 @@
     .rows h3 { font: 700 21px/1.25 var(--serif); margin: 0; }
     .rows p { margin: 0; color: var(--ink-2); max-width: 38em; }
 
-    .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+    .shots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .shots figure { margin: 0; }
     .shots img { display: block; width: 100%; height: auto; border-radius: 22px; border: 1px solid var(--rule); background: #0f131c; }
-    .shots figcaption { margin-top: 12px; font-size: 14.5px; color: var(--ink-2); }
-    .shots figcaption b { display: block; color: var(--ink); font: 700 17px var(--serif); margin-bottom: 2px; }
+    .shots figcaption { margin-top: 12px; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+    .shots figcaption b { display: block; color: var(--ink); font: 700 16px var(--serif); margin-bottom: 2px; }
 
     .releases { margin: 0; padding: 0; list-style: none; }
     .rel { display: grid; grid-template-columns: 150px 1fr auto; gap: 24px; align-items: baseline; padding: 20px 0; border-top: 1px solid var(--rule); }
@@ -111,7 +111,7 @@
 
       <section id="about">
         <h2>What it does</h2>
-        <p class="kicker">Four things, done without asking you to set anything up.</p>
+        <p class="kicker">Five things, done without asking you to set anything up.</p>
         <ul class="rows">
           <li>
             <h3>It decides what's urgent</h3>
@@ -122,12 +122,16 @@
             <p>Work is split into sessions of about an hour, spread out so you finish a day early, and fitted between your calendar events. Drag a session somewhere else and the rest of the plan rearranges itself around it.</p>
           </li>
           <li>
+            <h3>It knows your classes</h3>
+            <p>Add them by hand or snap a photo of your Certificate of Registration and Cling reads the schedule for you. You check it before it saves. Study sessions are never planned over class time, and classes show up on your Google Calendar too.</p>
+          </li>
+          <li>
             <h3>It works without a signal</h3>
             <p>Assignments, your plan and your reminders are all saved on the phone. It only goes online when you sign in or ask for fresh data.</p>
           </li>
           <li>
             <h3>Cling stays with you</h3>
-            <p>A little star can float over your other apps. Tap it to ask what's next or to plan study time, and drag it to the bottom of the screen to send it away.</p>
+            <p>A little star can float over your other apps and pop up now and then: a class about to start, a deadline, or a reminder to sleep when an exam is close. Tap it to ask what's next or to plan study time, and drag it to the bottom of the screen to send it away.</p>
           </li>
         </ul>
       </section>
@@ -136,9 +140,11 @@
         <h2>On the phone</h2>
         <p class="kicker">Screenshots from a real device, with real coursework.</p>
         <div class="shots">
-          <figure><img src="shots/home.png" width="540" height="1130" loading="lazy" alt="Home screen: the week at a glance, today's study sessions and the top-priority assignment"><figcaption><b>Home</b>The week at a glance, today's sessions and what to start next.</figcaption></figure>
-          <figure><img src="shots/schedule.png" width="540" height="1130" loading="lazy" alt="Schedule screen listing study sessions by day"><figcaption><b>Schedule</b>Sessions by day. Move one, finish one, or block off a day.</figcaption></figure>
-          <figure><img src="shots/chat.png" width="540" height="1130" loading="lazy" alt="Chat with Cling offering quick replies"><figcaption><b>Cling</b>Ask what's next, or tell it when you're busy.</figcaption></figure>
+          <figure><img src="shots/home.png" width="540" height="1170" loading="lazy" alt="Home screen: the week at a glance, today's study sessions, and Cling's speech bubble reminding you a study session has started"><figcaption><b>Home</b>The week at a glance, today's sessions, and Cling speaking up.</figcaption></figure>
+          <figure><img src="shots/schedule.png" width="540" height="1170" loading="lazy" alt="Schedule screen listing proposed study blocks by day"><figcaption><b>Schedule</b>Sessions by day. Move one, finish one, or block off a day.</figcaption></figure>
+          <figure><img src="shots/class.png" width="540" height="1170" loading="lazy" alt="Class screen showing the weekly class timetable by day"><figcaption><b>Classes</b>Your timetable. Study time is planned around it.</figcaption></figure>
+          <figure><img src="shots/camera.png" width="540" height="1170" loading="lazy" alt="Add classes sheet with Take photo, Choose from gallery and Add manually"><figcaption><b>Scan your COR</b>Snap it and Cling reads the schedule for you.</figcaption></figure>
+          <figure><img src="shots/chat.png" width="540" height="1170" loading="lazy" alt="Chat with Cling listing upcoming tasks with quick replies"><figcaption><b>Cling</b>Ask what's next, or tell it when you're busy.</figcaption></figure>
         </div>
       </section>
 

@@ -9,13 +9,15 @@
   An Android app that works offline, with a small star called <b>Cling</b> that nudges you.
 </p>
 
-<p align="center">
-  <img src="docs/images/home.png" width="230" alt="Home screen">
-  &nbsp;
-  <img src="docs/images/schedule.png" width="230" alt="Schedule screen">
-  &nbsp;
-  <img src="docs/images/chat.png" width="230" alt="Chat with Cling">
-</p>
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/images/home.png" width="160" alt="Home screen with Cling's speech bubble"><br><sub><b>Home</b></sub></td>
+    <td align="center"><img src="docs/images/schedule.png" width="160" alt="Schedule screen"><br><sub><b>Schedule</b></sub></td>
+    <td align="center"><img src="docs/images/class.png" width="160" alt="Class timetable by day"><br><sub><b>Classes</b></sub></td>
+    <td align="center"><img src="docs/images/camera.png" width="160" alt="Add classes: take a photo of your COR, choose one, or type it in"><br><sub><b>Scan your COR</b></sub></td>
+    <td align="center"><img src="docs/images/chat.png" width="160" alt="Chat with Cling"><br><sub><b>Chat</b></sub></td>
+  </tr>
+</table>
 
 ## What it does
 
