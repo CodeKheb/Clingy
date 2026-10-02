@@ -19,6 +19,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.OvershootInterpolator
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import com.clingy.R
@@ -41,6 +42,9 @@ class OverlayService : Service() {
   private var frameIndex = 0
   private var dockedRight = true
   private var snapAnimator: ValueAnimator? = null
+  private var spriteParams: WindowManager.LayoutParams? = null
+  private var nudgeView: FrameLayout? = null
+  private val hideNudgeRunnable = Runnable { hideNudge() }
 
   private val frameRunnable = object : Runnable {
     override fun run() {
@@ -57,6 +61,9 @@ class OverlayService : Service() {
     const val NOTIFICATION_ID = 1001
     const val EXTRA_MOOD = "mood"
     const val EXTRA_APP_FOREGROUND = "appForeground"
+    const val EXTRA_NUDGE_TEXT = "nudgeText"
+    const val EXTRA_NUDGE_ANIM = "nudgeAnim"
+    const val NUDGE_SHOW_MS = 8000L
 
     @Volatile
     var isRunning = false
@@ -71,6 +78,7 @@ class OverlayService : Service() {
     const val ANIM_SNAP = "snap"
     const val ANIM_REMINDER = "reminder"
     const val ANIM_HAPPY = "happy"
+    const val ANIM_SLEEP = "sleep"
 
     // Same source frames as assets/cling/*.png, copied into res/drawable by
     // the config plugin; mirrors clingFrames.ts's CLING_FRAMES map (minus
@@ -86,6 +94,7 @@ class OverlayService : Service() {
         R.drawable.reminder_4,
       ),
       ANIM_HAPPY to intArrayOf(R.drawable.happy_1, R.drawable.happy_2, R.drawable.happy_3),
+      ANIM_SLEEP to intArrayOf(R.drawable.sleep_1, R.drawable.sleep_2, R.drawable.sleep_3),
     )
 
     // Mirrors clingFrames.ts's CLING_FRAME_DURATION.
@@ -95,6 +104,7 @@ class OverlayService : Service() {
       ANIM_SNAP to 110L,
       ANIM_REMINDER to 200L,
       ANIM_HAPPY to 220L,
+      ANIM_SLEEP to 500L,
     )
 
     // Mirrors PetWidget.tsx's MOOD_ANIMATION map (neutral/happy only use
@@ -121,12 +131,11 @@ class OverlayService : Service() {
     val mood = intent?.getStringExtra(EXTRA_MOOD)
     if (mood != null) setAnimation(animationForMood(mood))
     if (intent?.hasExtra(EXTRA_APP_FOREGROUND) == true) {
-      bubbleView?.visibility = if (intent.getBooleanExtra(EXTRA_APP_FOREGROUND, false)) {
-        View.GONE
-      } else {
-        View.VISIBLE
-      }
+      val inApp = intent.getBooleanExtra(EXTRA_APP_FOREGROUND, false)
+      bubbleView?.visibility = if (inApp) View.GONE else View.VISIBLE
+      if (inApp) hideNudge()
     }
+    intent?.getStringExtra(EXTRA_NUDGE_TEXT)?.let { showNudge(it, intent.getStringExtra(EXTRA_NUDGE_ANIM)) }
     return START_STICKY
   }
 
@@ -135,6 +144,7 @@ class OverlayService : Service() {
     isRunning = false
     mainHandler.removeCallbacks(frameRunnable)
     snapAnimator?.cancel()
+    hideNudge(restoreAnimation = false)
     bubbleView?.let { windowManager.removeView(it) }
     bubbleView = null
     dismissTarget?.let { windowManager.removeView(it) }
@@ -240,6 +250,7 @@ class OverlayService : Service() {
           val dy = (event.rawY - initialTouchY).toInt()
           if (!isDragging && (kotlin.math.abs(dx) > 8 || kotlin.math.abs(dy) > 8)) {
             isDragging = true
+            hideNudge(restoreAnimation = false)
             setAnimation(ANIM_DRAG)
             showDismissTarget(target)
           }
@@ -282,8 +293,85 @@ class OverlayService : Service() {
     }
 
     bubbleView = imageView
+    spriteParams = params
     windowManager.addView(imageView, params)
     setAnimation(animationForMood(lastMood))
+  }
+
+  // A speech bubble in its own window beside the sprite, vertically level with it, that fades in and
+  // goes away after NUDGE_SHOW_MS. Same look and timing as the in-app NudgeBubble.tsx.
+  private fun showNudge(text: String, animation: String?) {
+    val sprite = bubbleView ?: return
+    val params = spriteParams ?: return
+    if (sprite.visibility != View.VISIBLE) return // the app is open: the in-app Cling talks instead
+    hideNudge(restoreAnimation = false)
+
+    val density = resources.displayMetrics.density
+    val screenWidth = resources.displayMetrics.widthPixels
+    val spriteWidth = (84 * density).toInt()
+    val spriteHeight = (90 * density).toInt()
+    val hang = (spriteWidth * 0.32f).toInt()
+    val gap = (4 * density).toInt()
+    val bubbleWidth = minOf((240 * density).toInt(), screenWidth - (spriteWidth - hang) - (24 * density).toInt())
+
+    val label = TextView(this).apply {
+      this.text = text
+      textSize = 13f
+      setTypeface(typeface, android.graphics.Typeface.BOLD)
+      setTextColor(Color.parseColor("#DFE2EF"))
+      maxWidth = bubbleWidth
+      setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
+      background = GradientDrawable().apply {
+        cornerRadius = 18 * density
+        setColor(Color.parseColor("#262A33"))
+        setStroke((1 * density).toInt(), Color.parseColor("#88FFB59D"))
+      }
+    }
+    val container = FrameLayout(this).apply {
+      alpha = 0f
+      addView(
+        label,
+        FrameLayout.LayoutParams(
+          FrameLayout.LayoutParams.WRAP_CONTENT,
+          FrameLayout.LayoutParams.WRAP_CONTENT,
+          Gravity.CENTER_VERTICAL or (if (dockedRight) Gravity.END else Gravity.START),
+        ),
+      )
+    }
+
+    val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+    } else {
+      @Suppress("DEPRECATION")
+      WindowManager.LayoutParams.TYPE_PHONE
+    }
+    val bubbleParams = WindowManager.LayoutParams(
+      bubbleWidth,
+      spriteHeight,
+      overlayType,
+      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+      PixelFormat.TRANSLUCENT,
+    ).apply {
+      gravity = Gravity.TOP or Gravity.START
+      x = if (dockedRight) params.x - bubbleWidth - gap else params.x + spriteWidth + gap
+      y = params.y
+    }
+    windowManager.addView(container, bubbleParams)
+    nudgeView = container
+    container.animate().alpha(1f).setDuration(250).start()
+
+    setAnimation(if (animation != null && FRAMES.containsKey(animation)) animation else ANIM_REMINDER)
+    mainHandler.postDelayed(hideNudgeRunnable, NUDGE_SHOW_MS)
+  }
+
+  private fun hideNudge(restoreAnimation: Boolean = true) {
+    mainHandler.removeCallbacks(hideNudgeRunnable)
+    val view = nudgeView ?: return
+    nudgeView = null
+    if (view.isAttachedToWindow) windowManager.removeView(view)
+    if (restoreAnimation) setAnimation(animationForMood(lastMood))
   }
 
   // Circle with an X, centred near the bottom of the screen; shown only while dragging.

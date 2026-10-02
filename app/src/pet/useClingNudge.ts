@@ -1,10 +1,12 @@
-// Every so often, picks something for the floating Cling to say (see nudgeText.ts) and holds it for a few seconds.
+// Every so often, picks something for the floating Cling to say (see nudgeText.ts). In the app it is held as a
+// bubble for a few seconds; with the app in the background it is handed to the overlay over other apps.
 
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
 import { getAllClassMeetings, getMeta, getUpcomingAssignments, getUpcomingScheduleBlocks, setMeta } from '../db/queries';
 import { pickNudge, type Nudge } from './nudgeText';
+import { showOverlayNudge } from './overlayBridge';
 
 const ENABLED_KEY = 'cling_nudges';
 const FIRST_NUDGE_MS = 20_000;
@@ -31,7 +33,7 @@ export function useClingNudge(): Nudge | null {
 
     const tick = async () => {
       try {
-        if (AppState.currentState === 'active' && (await isNudgesEnabled())) {
+        if (await isNudgesEnabled()) {
           const [assignments, blocks, classes] = await Promise.all([
             getUpcomingAssignments(),
             getUpcomingScheduleBlocks(),
@@ -47,8 +49,13 @@ export function useClingNudge(): Nudge | null {
           });
           if (next && !cancelled) {
             lastKey.current = next.key;
-            setNudge(next);
-            hideTimer = setTimeout(() => setNudge(null), SHOW_MS);
+            if (AppState.currentState === 'active') {
+              setNudge(next);
+              hideTimer = setTimeout(() => setNudge(null), SHOW_MS);
+            } else {
+              // App is in the background: the floating Cling over other apps says it instead (no-op if it's off).
+              showOverlayNudge(next.text, next.animation);
+            }
           }
         }
       } catch (err) {

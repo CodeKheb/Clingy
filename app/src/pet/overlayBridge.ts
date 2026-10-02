@@ -12,6 +12,7 @@ type ClingOverlayNative = {
   isOverlayRunning(): Promise<boolean>;
   setMood(mood: string): void;
   setAppForeground(foreground: boolean): void;
+  showNudge(text: string, animation: string): void;
 };
 
 const native: ClingOverlayNative | undefined = NativeModules.ClingOverlay;
@@ -46,6 +47,11 @@ export function setOverlayMood(mood: string): void {
 /** Hides the system-wide bubble while the app is foregrounded (PetFloatingFallback covers that case in-app). No-op if the overlay isn't running. */
 export function setOverlayAppForeground(foreground: boolean): void {
   native?.setAppForeground(foreground);
+}
+
+/** Has the system-wide Cling say something in a speech bubble. No-op if the overlay isn't running or the app is open. */
+export function showOverlayNudge(text: string, animation: string): void {
+  native?.showNudge(text, animation);
 }
 
 /** Whether the bubble service is alive right now (it can end by being dragged onto the dismiss X). */

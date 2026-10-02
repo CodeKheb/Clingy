@@ -109,4 +109,20 @@ class OverlayModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
       reactApplicationContext.startService(intent)
     }
   }
+
+  // Makes the floating Cling say something in a speech bubble (see OverlayService.showNudge).
+  // Only while the overlay is already running, same guard as setMood.
+  @ReactMethod
+  fun showNudge(text: String, animation: String) {
+    if (!OverlayService.isRunning) return
+    val intent = Intent(reactApplicationContext, OverlayService::class.java).apply {
+      putExtra(OverlayService.EXTRA_NUDGE_TEXT, text)
+      putExtra(OverlayService.EXTRA_NUDGE_ANIM, animation)
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      reactApplicationContext.startForegroundService(intent)
+    } else {
+      reactApplicationContext.startService(intent)
+    }
+  }
 }
