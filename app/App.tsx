@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
@@ -20,6 +21,9 @@ import { ScheduleScreen } from './src/screens/ScheduleScreen';
 import { startBackgroundSync, stopBackgroundSync } from './src/sync/backgroundSync';
 import { getMeta } from './src/db/queries';
 import { LAST_SYNCED_KEY, syncNow } from './src/sync/syncService';
+
+// Keep the Cling splash up until the database and sign-in check are done, instead of flashing a blank view.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 type Tab = 'home' | 'schedule' | 'class';
 
@@ -163,6 +167,11 @@ function AppContent() {
     };
   }, []);
 
+  const appReady = signedIn !== null && databaseStatus !== 'loading';
+  useEffect(() => {
+    if (appReady) void SplashScreen.hideAsync().catch(() => {});
+  }, [appReady]);
+
   if (signedIn === null) {
     return <View style={[styles.container, { paddingTop: insets.top }]} />;
   }
@@ -235,6 +244,6 @@ function AppContent() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#0f131c',
   },
 });

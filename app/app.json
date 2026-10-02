@@ -35,6 +35,15 @@
           "cameraPermission": "Cling uses the camera to read your Certificate of Registration.",
           "photosPermission": "Cling reads the photo of your Certificate of Registration you choose."
         }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0f131c",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
       ]
     ]
   }
