@@ -74,8 +74,6 @@
     #cling img { display: block; width: 100%; height: auto; pointer-events: none; }
     #cling img.flip { transform: scaleX(-1); }
     #cling:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
-    #bubble { position: fixed; top: 0; left: 0; z-index: 49; width: max-content; max-width: min(230px, calc(100vw - 16px)); box-sizing: border-box; padding: 10px 14px; border: 1.5px solid var(--ink); border-radius: 14px; background: #fffaf2; color: var(--ink); font: clamp(13px, 3.6vw, 15px)/1.4 var(--serif); overflow-wrap: anywhere; opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
-    #bubble.show { opacity: 1; transform: none; }
 
     @media (max-width: 760px) {
       .hero { grid-template-columns: 1fr; padding: 48px 0 64px; gap: 24px; }
@@ -167,7 +165,6 @@
     <footer>Clingy. Android only for now.</footer>
   </div>
 
-  <div id="bubble" role="status"></div>
   <div id="cling" role="img" aria-label="Cling, the mascot. Drag it around." tabindex="0"><img id="cling-img" alt="" src="cling/idle_1.png" draggable="false"></div>
 
 <script>
@@ -225,7 +222,6 @@
 
   const cling = document.getElementById('cling');
   const img = document.getElementById('cling-img');
-  const bubble = document.getElementById('bubble');
   const stage = document.getElementById('stage');
   Object.entries(FRAMES).forEach(([a, n]) => { for (let i = 1; i <= n; i++) new Image().src = `cling/${a}_${i}.png`; });
 
@@ -286,20 +282,9 @@
   let ticking = false;
   const requestLayout = () => { if (ticking) return; ticking = true; requestAnimationFrame(() => { ticking = false; layout(false); }); };
   addEventListener('scroll', requestLayout, { passive: true });
-  addEventListener('resize', () => { layout(false); bubble.classList.remove('show'); });
+  addEventListener('resize', () => layout(false));
   layout(false); play('idle');
 
-  function say(text, ms = 2800) {
-    bubble.textContent = text;
-    const s = size(), bw = bubble.offsetWidth;
-    const left = x + s.w / 2 > innerWidth / 2 ? x - bw - 8 : x + s.w - 4;
-    const bh = bubble.offsetHeight;
-    bubble.style.left = Math.max(8, Math.min(left, innerWidth - bw - 8)) + 'px';
-    bubble.style.top = Math.max(8, Math.min(y + 14, innerHeight - bh - 8)) + 'px';
-    bubble.classList.add('show');
-    clearTimeout(say.t); say.t = setTimeout(() => bubble.classList.remove('show'), ms);
-  }
-  setTimeout(() => say("Hi, I'm Cling. Pick me up!", 4500), 1400);
 
   let drag = null;
   cling.addEventListener('pointerdown', (e) => {
@@ -309,7 +294,7 @@
   cling.addEventListener('pointermove', (e) => {
     if (!drag) return;
     const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy, s = size();
-    if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; userMoved = true; cling.classList.add('dragging'); bubble.classList.remove('show'); play('drag'); }
+    if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; userMoved = true; cling.classList.add('dragging'); play('drag'); }
     if (drag.moved) place(Math.min(Math.max(-s.hang, drag.ox + dx), innerWidth - s.w + s.hang), Math.min(Math.max(0, drag.oy + dy), innerHeight - s.h));
   });
   const release = () => {
@@ -317,7 +302,7 @@
     const d = drag; drag = null; cling.classList.remove('dragging');
     if (!d.moved) {
       play('poke', { loop: false, onEnd: () => play('happy', { loop: false, onEnd: backToIdle }) });
-      say(["Hi! I'm Cling.", "Download the app and I'll keep your deadlines in check.", 'Try dragging me to the other side.'][Math.floor(Math.random() * 3)]);
+
       return;
     }
     dockedRight = x + size().w / 2 > innerWidth / 2; // decided by where it ended up, not by flick direction
@@ -326,7 +311,7 @@
   };
   cling.addEventListener('pointerup', release);
   cling.addEventListener('pointercancel', release);
-  cling.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play('poke', { loop: false, onEnd: backToIdle }); say("Hi! I'm Cling."); } });
+  cling.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play('poke', { loop: false, onEnd: backToIdle }); } });
 </script>
 </body>
 </html>
