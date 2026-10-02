@@ -7,7 +7,7 @@ How Clingy is put together, and why. For setup and screenshots see the [README](
 ```mermaid
 flowchart LR
   subgraph Phone["Android phone (Expo / React Native)"]
-    UI["Screens<br/>Home, Schedule, chat"]
+    UI["Screens<br/>Home, Schedule, Class, chat"]
     DB[("SQLite<br/>expo-sqlite")]
     KS[("SecureStore<br/>Google tokens")]
     ML["MiniLM on-device<br/>react-native-fast-tflite"]
@@ -27,10 +27,12 @@ flowchart LR
   end
 
   G["Google<br/>OAuth, Classroom, Calendar"]
+  GEM["Gemini API<br/>reads COR photos"]
   GH["GitHub<br/>repo, Actions, Releases"]
 
   Phone -- "access token per request" --> API
   API -- "client secret stays here" --> G
+  API -- "API key stays here" --> GEM
   SITE -- "read-only token" --> GH
   GH -- "tag push builds the APK" --> GH
 ```
@@ -38,13 +40,13 @@ flowchart LR
 | Part | Where | What it is |
 |---|---|---|
 | App | `app/` | Expo SDK 57 / React Native 0.86 / Hermes, TypeScript. Android is the target; the floating overlay is Android-only. |
-| Backend | `backend/` | A small stateless Express app on Vercel. It holds the Google OAuth client secret and proxies Classroom and Calendar. |
+| Backend | `backend/` | A small stateless Express app on Vercel. It holds the Google OAuth client secret and the Gemini API key, proxies Classroom and Calendar, and reads COR photos. |
 | Download page | `site/` | Static page plus two Vercel functions that read the private repo's releases. Separate Vercel project (root directory `site`). |
 | Release pipeline | `.github/workflows/release.yml` | Pushing a `v*` tag builds the arm64 APK and publishes a GitHub Release. |
 
 ## Why there is a backend at all
 
-A Google OAuth client secret cannot live inside an app that people install. So the backend does one job: it exchanges the OAuth code for tokens and forwards Classroom and Calendar calls. It stores nothing. Every request carries the user's access token, and the phone keeps all the data. (If the backend were lost, the app would keep working on what is already saved; it just couldn't sync.)
+A Google OAuth client secret (and a Gemini API key) cannot live inside an app that people install. So the backend does a few narrow jobs: it exchanges the OAuth code for tokens, forwards Classroom and Calendar calls, and passes a photo of a Certificate of Registration to Gemini. It stores nothing. Every request carries the user's access token, and the phone keeps all the data. (If the backend were lost, the app would keep working on what is already saved; it just couldn't sync.)
 
 ## Signing in
 
@@ -114,10 +116,11 @@ Code: `src/scheduling/scheduler.ts`. `buildProposedSchedule()` is deterministic 
 - **Fitting:** sessions go into free slots between calendar events and saved busy times, with a 10-minute gap after each and at most 4 hours of study per day. Most urgent assignment first.
 - **Pinned blocks:** when you move a block, its exact time is saved as a *pin*. Every rebuild places pins first, counts their minutes toward the assignment, and plans everything else around them.
 - **Finished sessions:** marking the first upcoming session done adds its minutes to that assignment's `done_minutes`; the rest re-plans around what's left.
+- **Arrange schedule:** classes are drawn on the day timeline as read-only blocks (not draggable). A study block can't be dropped or moved onto a class: `findClassOverlap()` (`src/classes/occurrences.ts`) rejects it in both the drag and the "pick a new time" paths. A block that ends exactly as a class starts is allowed.
 - **Busy times:** "can't make it" and the busy-time picker save unavailable windows that act like calendar events. They persist, so the automatic rebuild after a sync respects them.
 - **Classes:** the weekly timetable (`class_meetings`) is expanded into concrete busy windows for the 14-day window (`expandClassOccurrences`, local time) on every rebuild and merged with the calendar events. They are never stored as busy times, so editing the timetable takes effect on the next rebuild (`rescheduleAfterClassChange()`, called after every add, edit, delete and scan save).
 
-Small state that isn't a table lives in `app_meta` as JSON: `unavailable_windows`, `pinned_blocks`, `done_minutes`, `last_synced_at`, `calendar_push`, and `dismissals:<type>`.
+Small state that isn't a table lives in `app_meta` as JSON: `unavailable_windows`, `pinned_blocks`, `done_minutes`, `last_synced_at`, `calendar_push`, `cling_nudges`, and `dismissals:<type>`.
 
 ## Local data
 
@@ -165,26 +168,42 @@ Three faces of one mascot, sharing frames (`assets/cling`, `src/pet/clingFrames.
 
 - **In-app widget** (`PetFloatingFallback`): draggable, snaps to the nearest edge, animated by frame.
 - **Floating overlay** (`app/plugins/overlay/`): a Kotlin foreground service that draws the same sprite over other apps with `WindowManager`. It mirrors the in-app animation timings and snap behaviour, hides itself while the app is open, and has a circular ✕ to drag it onto to dismiss it. The JavaScript side talks to it through the `ClingOverlay` native module (`overlayBridge.ts`).
-- **Chat panel** (`ClingPanel`, `clingConversation.ts`): a scripted conversation tree with tap-only replies. Replies can trigger real work (list tasks, plan study time, ask for busy time).
+- **Chat panel** (`ClingPanel`, `clingConversation.ts`): a scripted conversation tree with tap-only replies. Replies can trigger real work (list tasks, plan study time, ask for busy time) or show today's and tomorrow's classes.
+
+### Nudges
+
+Cling speaks up now and then, in a cute, slightly clingy voice. `src/pet/nudgeText.ts` is a pure function (`pickNudge`) that takes the time, upcoming assignments, study blocks and classes and returns one line plus the animation to play; `useClingNudge.ts` calls it on a loose timer (first after about 20 seconds, then every 1.5 to 3 minutes) and never repeats a line back to back. Priority:
+
+1. **Bedtime.** After 11 PM with an exam within 72 hours, Cling plays the `sleep` animation and tells you to stop cramming and sleep. After 8 PM with an exam within 36 hours, it says to do one last light review and sleep early. Late at night with no exam it still asks why you're awake.
+2. **Quiet during class.** Nothing is shown while a class is on.
+3. **Class starting** within 30 minutes (with the room), a **study session** about to start or running, an **exam** within 72 hours, something **due** within 24 hours.
+4. Otherwise a short clingy filler line.
+
+With the app open, the line appears in a fading speech bubble beside the in-app widget (`NudgeBubble.tsx`), which also switches to the matching animation (`reminder`, `happy`, `sleep`). With the app in the background, the same line goes to the overlay through `showOverlayNudge()`, and `OverlayService.kt` shows it in its own window level with the sprite, then removes it after about 8 seconds. Both are no-ops when the overlay is off. Nudges can be turned off in Settings (`cling_nudges` in `app_meta`). They need the app's JavaScript to be alive, so they stop if Android kills the app process.
 
 **Mood** (`moodAggregation.ts`) is derived from the aggregate urgency of upcoming work and saved in `pet_state`; it picks Cling's animation, including the "!" reminder state.
 
 The native pieces are added to the generated Android project by a local Expo config plugin, `app/plugins/overlay/index.js`: it copies the Kotlin sources, the sprite drawables and the model asset, declares the service and permissions in the manifest, and registers the packages. `android/` itself is generated by `npx expo prebuild` and is not committed.
 
+## Startup
+
+The native splash (`expo-splash-screen`, configured in `app.json`) shows the Cling star on the app's dark background. `App.tsx` keeps it up (`preventAutoHideAsync`) until the database has opened and the stored sign-in has been checked, then hides it, so there is no blank white view at launch.
+
 ## Offline behaviour
 
 | Works with no connection | Needs a connection |
 |---|---|
-| Every screen (they read SQLite) | Signing in |
+| Every screen, including the Class tab (they read SQLite) | Signing in |
 | Scoring, planning, moving and finishing sessions | Syncing Classroom and Calendar |
 | Reminders and the Cling overlay and chat | Refreshing an expired token |
-| Staying signed in (tokens are in SecureStore) | Pushing study blocks to Google Calendar |
+| Staying signed in (tokens are in SecureStore) | Pushing study blocks and classes to Google Calendar |
+| Adding, editing and deleting classes by hand | Scanning a COR photo |
 
 ## Download page and releases
 
 ```mermaid
 flowchart LR
-  T["git tag v1.0.0 and push"] --> A["GitHub Actions<br/>builds the arm64 APK"]
+  T["git tag v1.1.0 and push"] --> A["GitHub Actions<br/>builds the arm64 APK"]
   A --> R["GitHub Release<br/>with the APK attached"]
   P["Download page"] -- "GET /api/releases" --> F["Vercel function<br/>(GITHUB_TOKEN, read-only)"]
   F --> R
@@ -200,8 +219,10 @@ The repository is private, so a public page can't read its releases directly. `s
 |---|---|
 | App, development | `npx expo prebuild --platform android`, then `./gradlew installDebug` (needs JDK 21), then `npx expo start --dev-client` |
 | App, release | Push a `v*` tag, or run `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a` locally |
-| Backend | Vercel project with root directory `backend`; deploys on every push to `main` |
+| Backend | Vercel project with root directory `backend`; deploys on every push to `main`. Env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GEMINI_API_KEY`, and optionally `GEMINI_MODEL` |
 | Download page | Vercel project with root directory `site`; env var `GITHUB_TOKEN` |
+
+A debug build loads its JavaScript from the Metro dev server, so it shows a blank screen when Metro isn't running; use `adb reverse tcp:8081 tcp:8081` and `npx expo start --dev-client`, or install the release build, which carries its own code. Expo reads `app/.env.local` before `app/.env`, so a backend address in `.env.local` wins.
 
 The release APK is signed with the standard debug key from the Expo template, which is fine for sideloading but means a proper signing key is needed before distributing updates widely.
 
@@ -212,4 +233,6 @@ The release APK is signed with the standard debug key from the Expo template, wh
 - Classroom's point value is used when the course provides it; otherwise effort comes from the task type alone.
 - Task-type detection is keyword-first, so an oddly worded title (for example an exam-results upload) can be mistyped.
 - Sign-in tokens pass through a deep link, and the APK uses the debug signing key.
+- COR scans depend on photo quality and the model; the student always reviews the parsed list before saving, and day patterns the app can't read must be picked by hand.
+- Classes appear on Google Calendar for the next four weeks only, and are refreshed whenever the plan is rebuilt.
 - No automated tests; the scheduler was exercised with throwaway scripts against real data.
