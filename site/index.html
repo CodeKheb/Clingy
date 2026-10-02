@@ -74,7 +74,7 @@
     #cling img { display: block; width: 100%; height: auto; pointer-events: none; }
     #cling img.flip { transform: scaleX(-1); }
     #cling:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 12px; }
-    #bubble { position: fixed; z-index: 49; max-width: 230px; padding: 10px 14px; border: 1.5px solid var(--ink); border-radius: 14px; background: #fffaf2; color: var(--ink); font: 15px/1.4 var(--serif); opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+    #bubble { position: fixed; top: 0; left: 0; z-index: 49; width: max-content; max-width: min(230px, calc(100vw - 16px)); box-sizing: border-box; padding: 10px 14px; border: 1.5px solid var(--ink); border-radius: 14px; background: #fffaf2; color: var(--ink); font: clamp(13px, 3.6vw, 15px)/1.4 var(--serif); overflow-wrap: anywhere; opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
     #bubble.show { opacity: 1; transform: none; }
 
     @media (max-width: 760px) {
@@ -286,15 +286,16 @@
   let ticking = false;
   const requestLayout = () => { if (ticking) return; ticking = true; requestAnimationFrame(() => { ticking = false; layout(false); }); };
   addEventListener('scroll', requestLayout, { passive: true });
-  addEventListener('resize', () => layout(false));
+  addEventListener('resize', () => { layout(false); bubble.classList.remove('show'); });
   layout(false); play('idle');
 
   function say(text, ms = 2800) {
     bubble.textContent = text;
     const s = size(), bw = bubble.offsetWidth;
     const left = x + s.w / 2 > innerWidth / 2 ? x - bw - 8 : x + s.w - 4;
-    bubble.style.left = Math.min(Math.max(8, left), innerWidth - bw - 8) + 'px';
-    bubble.style.top = Math.max(8, y + 14) + 'px';
+    const bh = bubble.offsetHeight;
+    bubble.style.left = Math.max(8, Math.min(left, innerWidth - bw - 8)) + 'px';
+    bubble.style.top = Math.max(8, Math.min(y + 14, innerHeight - bh - 8)) + 'px';
     bubble.classList.add('show');
     clearTimeout(say.t); say.t = setTimeout(() => bubble.classList.remove('show'), ms);
   }
